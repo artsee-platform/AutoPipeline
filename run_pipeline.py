@@ -7,6 +7,7 @@ Usage:
   python run_pipeline.py --stage 1 --batch 10         # web enrich 10 schools
   python run_pipeline.py --stage 2 --batch 20         # QS rankings lookup
   python run_pipeline.py --stage 3 --batch 10         # video metadata
+  python run_pipeline.py --stage 4 --batch 5          # seed programs (Tavily + Claude)
   python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
   python run_pipeline.py                              # default: runs stages 0-3
   python run_pipeline.py --retry-errors               # reset error rows → pending
@@ -37,7 +38,7 @@ def main():
         "--stage",
         type=str,
         default=None,
-        help="Stage(s) to run: 0, 1, 2, 3, or range like 1-3",
+        help="Stage(s) to run: 0–4, or range like 1-3 (4 = programs seed)",
     )
     parser.add_argument(
         "--batch",
@@ -74,11 +75,11 @@ def main():
         try:
             stages = parse_stages(args.stage)
         except ValueError:
-            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-3 or a range like 1-3.")
+            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-4 or a range like 1-3.")
             sys.exit(1)
-        invalid = [s for s in stages if s not in {0, 1, 2, 3}]
+        invalid = [s for s in stages if s not in {0, 1, 2, 3, 4}]
         if invalid:
-            log.error(f"Invalid stage(s): {invalid}. Use only 0, 1, 2, 3 or range like 1-3.")
+            log.error(f"Invalid stage(s): {invalid}. Use only 0, 1, 2, 3, 4 or a range like 1-4.")
             sys.exit(1)
 
     log.info(f"Running stages {stages} with batch_size={batch_size}")
@@ -102,6 +103,10 @@ def main():
 
         elif stage == 3:
             from pipeline.stage3_video import run
+            run(settings, batch_size)
+
+        elif stage == 4:
+            from pipeline.stage4_programs import run
             run(settings, batch_size)
 
         else:
