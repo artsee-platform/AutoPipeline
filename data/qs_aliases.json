@@ -1,0 +1,9 @@
+{
+  "_comment": "Maps DB name_en → exact QS institution name (as it appears in the Excel/CSV).",
+  "_usage": "Add entries here for abbreviations, translated names, alternate spellings, and historical naming variants. Run stage2 again after editing this file.",
+  "_examples_remove_before_use": {
+    "MIT": "Massachusetts Institute of Technology (MIT)",
+    "RCA": "Royal College of Art",
+    "Central Saint Martins": "Central Saint Martins, University of the Arts London"
+  }
+}

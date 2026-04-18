@@ -28,6 +28,7 @@ def run(settings: Settings, batch_size: int) -> None:
             # 1. Claude web research
             web_data = research_school(
                 claude,
+                settings,
                 name_en=name_en,
                 name_zh=school.get("name_zh") or "",
                 website=school.get("official_website") or "",
@@ -39,7 +40,7 @@ def run(settings: Settings, batch_size: int) -> None:
             # 3. Merge: web_data wins for text fields; site_data for media
             merged = {**school, **web_data, **site_data, "status": "enriched"}
             # Preserve known fields from xlsx that Claude might overwrite
-            merged["name_en"] = name_en
+            merged["name_en"] = web_data.get("name_en") or name_en
             merged["name_zh"] = school.get("name_zh") or merged.get("name_zh")
             merged["country"] = school.get("country") or merged.get("country")
             merged["official_website"] = school.get("official_website") or merged.get("official_website")

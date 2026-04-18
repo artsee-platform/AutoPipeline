@@ -3,12 +3,12 @@
 Art/Design Schools Data Pipeline
 =================================
 Usage:
-  python run_pipeline.py --stage 0                    # seed Supabase from xlsx
+  python run_pipeline.py --stage 0                    # seed Supabase from xlsx (explicit only)
   python run_pipeline.py --stage 1 --batch 10         # web enrich 10 schools
   python run_pipeline.py --stage 2 --batch 20         # QS rankings lookup
   python run_pipeline.py --stage 3 --batch 10         # video metadata
-  python run_pipeline.py --stage 4 --batch 20         # sync to Lark Base
-  python run_pipeline.py --stage 1-4 --batch 10       # run all enrich stages
+  python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
+  python run_pipeline.py                              # default: runs stages 0-3
   python run_pipeline.py --retry-errors               # reset error rows → pending
 """
 import argparse
@@ -37,7 +37,7 @@ def main():
         "--stage",
         type=str,
         default=None,
-        help="Stage(s) to run: 0, 1, 2, 3, 4, or range like 1-4",
+        help="Stage(s) to run: 0, 1, 2, 3, or range like 1-3",
     )
     parser.add_argument(
         "--batch",
@@ -69,12 +69,16 @@ def main():
 
     # Determine which stages to run
     if args.stage is None:
-        stages = [0, 1, 2, 3, 4]
+        stages = [0, 1, 2, 3]
     else:
         try:
             stages = parse_stages(args.stage)
         except ValueError:
-            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-4 or a range like 1-4.")
+            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-3 or a range like 1-3.")
+            sys.exit(1)
+        invalid = [s for s in stages if s not in {0, 1, 2, 3}]
+        if invalid:
+            log.error(f"Invalid stage(s): {invalid}. Use only 0, 1, 2, 3 or range like 1-3.")
             sys.exit(1)
 
     log.info(f"Running stages {stages} with batch_size={batch_size}")
@@ -98,10 +102,6 @@ def main():
 
         elif stage == 3:
             from pipeline.stage3_video import run
-            run(settings, batch_size)
-
-        elif stage == 4:
-            from pipeline.stage4_sync_lark import run
             run(settings, batch_size)
 
         else:

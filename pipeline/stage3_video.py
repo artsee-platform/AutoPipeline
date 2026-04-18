@@ -103,7 +103,7 @@ def run(settings: Settings, batch_size: int) -> None:
             # YouTube search
             yt_videos = _ydl_search(f"ytsearch3:{name_en} official university campus")
             # Bilibili search (requires bilibili extractor, may fail outside CN)
-            bili_videos = _ydl_search(f"bilisearch3:{name_zh}" if name_zh else "")
+            bili_videos = _ydl_search(f"bilisearch3:{name_zh}") if name_zh else []
 
             all_videos = yt_videos + bili_videos
 

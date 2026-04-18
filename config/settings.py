@@ -9,11 +9,8 @@ load_dotenv()
 class Settings:
     supabase_url: str
     supabase_service_key: str
-    lark_app_id: str
-    lark_app_secret: str
-    lark_base_app_token: str
-    lark_table_id: str
     anthropic_api_key: str
+    tavily_api_key: str
     batch_size: int
 
 
@@ -27,10 +24,7 @@ def load_settings() -> Settings:
     return Settings(
         supabase_url=require("SUPABASE_URL"),
         supabase_service_key=require("SUPABASE_SERVICE_KEY"),
-        lark_app_id=require("LARK_APP_ID"),
-        lark_app_secret=require("LARK_APP_SECRET"),
-        lark_base_app_token=require("LARK_BASE_APP_TOKEN"),
-        lark_table_id=require("LARK_TABLE_ID"),
         anthropic_api_key=require("ANTHROPIC_API_KEY"),
+        tavily_api_key=require("TAVILY_API_KEY"),
         batch_size=int(os.getenv("BATCH_SIZE", "10")),
     )
