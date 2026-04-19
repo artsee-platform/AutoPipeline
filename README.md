@@ -38,7 +38,7 @@ yjxauto/
 ## 2. 流水线阶段与状态流转
 
 ### Stage 0：种子导入（Excel -> Supabase）
-- 读取 `data/schools.xlsx`，清洗后写入 `schools_auto`；
+- 读取 `data/schools.xlsx`，清洗后写入 `schools`；
 - 新记录写入 `status="pending"`；
 - 已存在记录仅更新种子字段（`name_zh/country/official_website`），不覆盖已富化内容。
 
@@ -145,7 +145,7 @@ python run_pipeline.py --retry-errors
 ## 7. Supabase 注意事项
 
 ### Supabase
-- 当前表名固定为 `schools_auto`（见 `db/supabase_client.py`）；
+- 学校主表表名为 `schools`（见 `db/supabase_client.py` 中的 `TABLE`）；
 - 需包含 `db/models.py` 里涉及的字段（至少保证各阶段会写入字段存在）。
 
 ---
@@ -171,3 +171,11 @@ python run_pipeline.py --retry-errors
 - 建议按 `0 -> 1 -> 2 -> 3` 顺序逐步验证；
 - 排查问题优先看每个 stage 的日志输出与 Supabase 状态字段。
 
+
+## 总结：
+各 Stage 简要说明
+Stage 0：从 data/schools.xlsx 写入/更新 schools 种子字段，status='pending'。
+Stage 1：对 pending 学校做 网页富化（Claude + 抓官网等），补描述、链接、图片等，状态 → enriched。
+Stage 2：对 enriched 做 QS 排名匹配（本地匹配 + 必要时 Tavily/Claude），写各类 QS / tier，状态 → qs_done。
+Stage 3：对 qs_done 用 视频元数据（如 yt-dlp）补标签/描述等，状态 → done。
+Stage 4（顺带）：按 schools 拉证据，往 programs 里塞项目，不是富化学校主表的主线。

@@ -8,6 +8,8 @@ Usage:
   python run_pipeline.py --stage 2 --batch 20         # QS rankings lookup
   python run_pipeline.py --stage 3 --batch 10         # video metadata
   python run_pipeline.py --stage 4 --batch 5          # seed programs (Tavily + Claude)
+  python run_pipeline.py --stage 4 --batch 200 --reset-programs  # wipe programs, re-seed all schools
+  python run_pipeline.py --stage 5 --batch 10         # program fees / admissions / evaluations / art tags
   python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
   python run_pipeline.py                              # default: runs stages 0-3
   python run_pipeline.py --retry-errors               # reset error rows → pending
@@ -21,7 +23,7 @@ log = get_logger("pipeline")
 
 
 def parse_stages(stage_str: str) -> list[int]:
-    """Parse '1-4' → [1,2,3,4], '2' → [2]."""
+    """Parse '1-4' → [1,2,3,4], '2' → [2]. Supports up to stage 5."""
     if "-" in stage_str:
         start, end = stage_str.split("-", 1)
         return list(range(int(start), int(end) + 1))
@@ -38,7 +40,7 @@ def main():
         "--stage",
         type=str,
         default=None,
-        help="Stage(s) to run: 0–4, or range like 1-3 (4 = programs seed)",
+        help="Stage(s) to run: 0–5, or range like 1-3 (4=programs, 5=program satellite tables)",
     )
     parser.add_argument(
         "--batch",
@@ -50,6 +52,11 @@ def main():
         "--retry-errors",
         action="store_true",
         help="Reset all error-status rows back to pending, then exit",
+    )
+    parser.add_argument(
+        "--reset-programs",
+        action="store_true",
+        help="With --stage 4: delete all rows in programs before seeding (full re-run with current strategy)",
     )
     args = parser.parse_args()
 
@@ -75,11 +82,11 @@ def main():
         try:
             stages = parse_stages(args.stage)
         except ValueError:
-            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-4 or a range like 1-3.")
+            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-5 or a range like 1-3.")
             sys.exit(1)
-        invalid = [s for s in stages if s not in {0, 1, 2, 3, 4}]
+        invalid = [s for s in stages if s not in {0, 1, 2, 3, 4, 5}]
         if invalid:
-            log.error(f"Invalid stage(s): {invalid}. Use only 0, 1, 2, 3, 4 or a range like 1-4.")
+            log.error(f"Invalid stage(s): {invalid}. Use only 0–5 or a range like 1-5.")
             sys.exit(1)
 
     log.info(f"Running stages {stages} with batch_size={batch_size}")
@@ -106,7 +113,24 @@ def main():
             run(settings, batch_size)
 
         elif stage == 4:
+            if args.reset_programs:
+                from db.supabase_client import get_client
+                log.warning("Deleting all rows from table: programs (--reset-programs)")
+                client = get_client(settings)
+                tbl = client.table("programs")
+                # PostgREST requires a filter. Prefer uuid PK; fall back to serial int.
+                try:
+                    tbl.delete().neq(
+                        "id", "00000000-0000-0000-0000-000000000000"
+                    ).execute()
+                except Exception as e:
+                    log.debug("programs delete (uuid filter) failed, retry int: %s", e)
+                    tbl.delete().neq("id", -1).execute()
             from pipeline.stage4_programs import run
+            run(settings, batch_size)
+
+        elif stage == 5:
+            from pipeline.stage5_program_satellite import run
             run(settings, batch_size)
 
         else:

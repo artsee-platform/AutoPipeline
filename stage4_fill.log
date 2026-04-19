@@ -1,0 +1,283 @@
+[12:45:38] INFO pipeline — Running stages [4] with batch_size=500
+[12:45:38] INFO pipeline — ========================================
+[12:45:38] INFO pipeline —   Stage 4
+[12:45:38] INFO pipeline — ========================================
+[12:45:39] WARNING pipeline — Deleting all rows from table: programs (--reset-programs)
+Traceback (most recent call last):
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/run_pipeline.py", line 132, in <module>
+    main()
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/run_pipeline.py", line 120, in main
+    ).execute()
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'invalid input syntax for type integer: "00000000-0000-0000-0000-000000000000"', 'code': '22P02', 'hint': None, 'details': None}
+[12:45:59] INFO pipeline — Running stages [4] with batch_size=500
+[12:45:59] INFO pipeline — ========================================
+[12:45:59] INFO pipeline —   Stage 4
+[12:45:59] INFO pipeline — ========================================
+[12:45:59] WARNING pipeline — Deleting all rows from table: programs (--reset-programs)
+[12:46:02] INFO stage4_programs — Loaded 198 schools from schools
+[12:46:02] INFO stage4_programs — → Aalto University, School of Arts, Design and Architecture (need 3 programs)
+[12:46:17] WARNING stage4_programs —   fetch failed 'https://www.aalto.ﬁ/en': Failed to parse: https://www.aalto.ﬁ/en
+[12:46:42] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:46:44] INFO stage4_programs — → Academy of Art University (need 3 programs)
+[12:47:29] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:47:30] INFO stage4_programs — → Academy of Arts and Design, Tsinghua University (need 3 programs)
+[12:48:23] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:48:25] INFO stage4_programs — → Academy of Fine Arts in Warsaw (need 3 programs)
+[12:48:53] WARNING stage4_programs —   skip non-html 'https://erasmus.asp.waw.pl/app/uploads/sites/16/2023/08/asp-warsaw-erasmus-guide.pdf' (application/pdf)
+[12:48:55] WARNING stage4_programs —   skip non-html 'https://erasmus.asp.waw.pl/app/uploads/sites/16/2023/12/graphic-art.pdf' (application/pdf)
+[12:49:20] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:49:21] INFO stage4_programs — → Academy of Fine Arts of Kinshasa (need 3 programs)
+[12:49:41] WARNING stage4_programs —   fetch failed 'https://www.acba-kinshasa.cd/': HTTPSConnectionPool(host='www.acba-kinshasa.cd', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.acba-kinshasa.cd', port=443): Failed to resolve 'www.acba-kinshasa.cd' ([Errno 8] nodename nor servname provided, or not known)"))
+[12:49:59] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:50:00] INFO stage4_programs — → Academy of San Carlos (need 3 programs)
+[12:50:37] WARNING stage4_programs —   skip non-html 'https://academiasancarlos.unam.mx/wp-content/uploads/2025/08/history-of-a-living_institution.pdf' (application/pdf)
+[12:50:55] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:50:56] INFO stage4_programs — → Accademia di Belle Arti di Brera (need 3 programs)
+[12:52:06] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:52:07] INFO stage4_programs — → Accademia di Belle Arti di Firenze (need 3 programs)
+[12:52:30] WARNING stage4_programs —   fetch failed 'http://www.accademia.ﬁ renze.it/': Failed to parse: http://www.accademia.ﬁ renze.it/
+[12:52:55] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:52:56] INFO stage4_programs — → Accademia di Belle Arti di Roma (need 3 programs)
+[12:53:48] WARNING stage4_programs —   fetch failed 'https://www.accademiabelleartiroma.it/': HTTPSConnectionPool(host='www.accademiabelleartiroma.it', port=443): Max retries exceeded with url: / (Caused by ConnectTimeoutError(<HTTPSConnection(host='www.accademiabelleartiroma.it', port=443) at 0x116749990>, 'Connection to www.accademiabelleartiroma.it timed out. (connect timeout=25)'))
+[12:54:11] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:54:12] INFO stage4_programs — → Addis Ababa University, School of Fine Arts and Design (need 3 programs)
+[12:54:58] WARNING stage4_programs —   skip non-html 'https://etd.aau.edu.et/bitstreams/9af61305-d639-4b23-a1d7-7631f391eac5/download' (application/pdf;charset=utf-8)
+[12:55:43] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:55:44] INFO stage4_programs — → Ahmadu Bello University, Department of Fine Arts (need 3 programs)
+[12:56:23] WARNING stage4_programs —   fetch failed 'https://www.abu.edu.ng/': HTTPSConnectionPool(host='www.abu.edu.ng', port=443): Max retries exceeded with url: / (Caused by NewConnectionError("HTTPSConnection(host='www.abu.edu.ng', port=443): Failed to establish a new connection: [Errno 51] Network is unreachable"))
+[12:56:31] WARNING stage4_programs —   skip non-html 'https://abu.edu.ng/wp-content/uploads/2023/08/abu-academic-brief.pdf' (application/pdf)
+[12:56:37] WARNING stage4_programs —   skip non-html 'https://abu.edu.ng/wp-content/uploads/2023/09/STUDENT-HANDBOOK-21-22-1.pdf' (application/pdf)
+[12:56:42] WARNING stage4_programs —   skip non-html 'https://abu.edu.ng/wp-content/uploads/2024/04/Updated-Student-Handbook-for-2023-2024-Session.pdf' (application/pdf)
+[12:57:11] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:57:12] INFO stage4_programs — → Alberta University of the Arts (need 3 programs)
+[12:58:03] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:58:04] INFO stage4_programs — → Alberta University of the Arts (need 3 programs)
+[12:58:40] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:58:41] INFO stage4_programs — → Arizona State University School of Art (need 3 programs)
+[12:59:38] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[12:59:39] INFO stage4_programs — → ArtCenter College of Design (need 3 programs)
+[13:00:35] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:00:36] INFO stage4_programs — → ArtEZ University of the Arts (need 3 programs)
+[13:01:22] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:01:23] INFO stage4_programs — → Arts Institute of the Federal University of Rio Grande do Sul (need 3 programs)
+[13:01:47] WARNING stage4_programs —   skip non-html 'https://seer.ufrgs.br/PortoArte/article/download/62328/36606' (application/pdf)
+[13:02:11] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:02:13] INFO stage4_programs — → Auckland University of Technology, School of Art and Design (need 3 programs)
+[13:02:40] WARNING stage4_programs —   skip non-html 'https://student.aut.ac.nz/__data/assets/pdf_file/0003/326766/04-Admission.pdf' (application/pdf)
+[13:02:41] WARNING stage4_programs —   skip non-html 'https://www.aut.ac.nz/__data/assets/pdf_file/0003/138468/BAD-Hons-application-guide.pdf' (application/pdf)
+[13:02:42] WARNING stage4_programs —   skip non-html 'https://www.aut.ac.nz/__data/assets/pdf_file/0004/244093/2020-Art-and-Design-Programme-Guide.pdf?ref=SchoolBridge&utm_school=aquinas' (application/pdf)
+[13:02:43] WARNING stage4_programs —   skip non-html 'https://www.aut.ac.nz/__data/assets/pdf_file/0018/980001/Art-and-Design-2026-Final-Web.pdf' (application/pdf)
+[13:03:09] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:03:10] INFO stage4_programs — → Autonomous University of Nuevo León (need 3 programs)
+[13:03:47] WARNING stage4_programs —   skip non-html 'http://www.fcb.uanl.mx/nw/images/430/AP/en/lbg/1_Semester/1_PA_Fisica_general_FCB_EN.pdf' (application/pdf)
+[13:03:49] WARNING stage4_programs —   skip non-html 'https://www.medicina.uanl.mx/wp-content/uploads/2025/06/Advanced-mathematics.pdf' (application/pdf)
+[13:04:10] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:04:11] INFO stage4_programs — → Beijing Film Academy (need 3 programs)
+[13:04:48] WARNING stage4_programs —   fetch failed 'https://www.bfa.edu.cn/': 412 Client Error: Precondition Failed for url: https://www.bfa.edu.cn/
+[13:04:50] WARNING stage4_programs —   fetch failed 'https://eng.bfa.edu.cn/ADMISSIONS/Master_Programs.htm': 412 Client Error: Precondition Failed for url: https://eng.bfa.edu.cn/ADMISSIONS/Master_Programs.htm
+[13:04:51] WARNING stage4_programs —   fetch failed 'https://eng.bfa.edu.cn/ADMISSIONS/Undergeaduate.htm': 412 Client Error: Precondition Failed for url: https://eng.bfa.edu.cn/ADMISSIONS/Undergeaduate.htm
+[13:04:52] WARNING stage4_programs —   fetch failed 'https://int-prog.bfa.edu.cn/': 412 Client Error: Precondition Failed for url: https://int-prog.bfa.edu.cn/
+[13:04:53] WARNING stage4_programs —   fetch failed 'https://int-prog.bfa.edu.cn/Admission.htm': 412 Client Error: Precondition Failed for url: https://int-prog.bfa.edu.cn/Admission.htm
+[13:05:19] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:05:20] INFO stage4_programs — → Berlin University of the Arts (need 3 programs)
+[13:06:27] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:06:29] INFO stage4_programs — → Brigham Young University College of Fine Arts and Communications (need 3 programs)
+[13:07:22] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:07:23] INFO stage4_programs — → Cairo University Faculty of Applied Arts (need 3 programs)
+[13:08:04] WARNING stage4_programs —   skip non-html 'http://gsrd.cu.edu.eg/wp-content/uploads/2020/03/%D8%A7%D9%84%D9%84%D8%A7%D8%A6%D8%AD%D8%A9%20%D9%86%D9%87%D8%A7%D8%A6%D9%89%20%D8%A5%D9%86%D8%AC%D9%84%D9%8A%D8%B2%D9%89.pdf' (application/pdf)
+[13:08:11] WARNING stage4_programs —   skip non-html 'http://masscomm.cu.edu.eg/AdminDepartmentFiles/Student%20Guide%202021-Final%20Version%C2%A4admin_mayada%C2%A42020-11-18%20%2010-19-6-4.pdf' (application/pdf)
+[13:08:14] WARNING stage4_programs —   skip non-html 'http://masscomm.cu.edu.eg/en/AdminDepartmentFiles/postgraduate%20programs%C2%A4eng.heba%C2%A42022-9-4%20%200-18-41-874.pdf' (application/pdf)
+[13:08:40] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:08:41] INFO stage4_programs — → Cal State LA Department of Art (need 3 programs)
+[13:09:14] WARNING stage4_programs —   fetch failed 'https://www.calstatela.edu/college of-arts-and-letters/department-of-art': 404 Client Error: Not Found for url: https://www.calstatela.edu/college%20of-arts-and-letters/department-of-art
+[13:09:54] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:09:55] INFO stage4_programs — → California State University Long Beach College of the Arts (need 3 programs)
+[13:10:16] WARNING stage4_programs —   fetch failed 'https://www.csulb.edu/colleges/arts': 404 Client Error: Not Found for url: https://web.csulb.edu/colleges/arts
+[13:10:54] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:10:56] INFO stage4_programs — → California State University, Northridge Mike Curb College of Arts, Media, and Communication (need 3 programs)
+[13:11:21] WARNING stage4_programs —   fetch failed 'https://www.csun.edu/arts': 404 Client Error: Not Found for url: https://www.csun.edu/arts
+[13:11:49] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:11:50] INFO stage4_programs — → Cape Peninsula University of Technology, Faculty of Informatics and Design (need 3 programs)
+[13:12:26] WARNING stage4_programs —   fetch failed 'https://www.cput.ac.za/': HTTPSConnectionPool(host='www.cput.ac.za', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:12:51] WARNING stage4_programs —   fetch failed 'http://www.cput.ac.za/storage/study_at_cput/CPUT_prospectus.pdf': HTTPConnectionPool(host='www.cput.ac.za', port=80): Max retries exceeded with url: /storage/study_at_cput/CPUT_prospectus.pdf (Caused by ConnectTimeoutError(<HTTPConnection(host='www.cput.ac.za', port=80) at 0x116c67f40>, 'Connection to www.cput.ac.za timed out. (connect timeout=25)'))
+[13:12:53] WARNING stage4_programs —   fetch failed 'https://www.cput.ac.za/faculties/fid': HTTPSConnectionPool(host='www.cput.ac.za', port=443): Max retries exceeded with url: /faculties/fid (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:12:54] WARNING stage4_programs —   fetch failed 'https://www.cput.ac.za/faculties/fid/departments/applied-design/design-postgraduate-studies': HTTPSConnectionPool(host='www.cput.ac.za', port=443): Max retries exceeded with url: /faculties/fid/departments/applied-design/design-postgraduate-studies (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:12:55] WARNING stage4_programs —   fetch failed 'https://www.cput.ac.za/images/Informatics%20and%20Design/ATID_PORT%20REQ%202021%20-%20FINAL.pdf': HTTPSConnectionPool(host='www.cput.ac.za', port=443): Max retries exceeded with url: /images/Informatics%20and%20Design/ATID_PORT%20REQ%202021%20-%20FINAL.pdf (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:13:19] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:13:20] INFO stage4_programs — → Central Academy of Fine Arts (need 3 programs)
+[13:14:15] WARNING stage4_programs —   skip non-html 'http://xxgk.cafa.edu.cn/cafa//uploadFiles/uploadImgs//202312/25151516o2kw.pdf' (application/pdf)
+[13:14:38] WARNING stage4_programs —   skip non-html 'http://xxgk.cafa.edu.cn/cafa//uploadFiles/uploadImgs//202412/10092021m1xd.pdf' (application/pdf)
+[13:15:04] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:15:05] INFO stage4_programs — → Chelsea College of Arts (need 3 programs)
+[13:15:48] WARNING stage4_programs —   fetch failed 'https://www.arts.ac.uk/colleges/chelsea-college-of-arts': 403 Client Error: Forbidden for url: https://www.arts.ac.uk/colleges/chelsea-college-of-arts
+[13:15:49] WARNING stage4_programs —   fetch failed 'https://www.arts.ac.uk/colleges/chelsea-college-of-arts/courses/postgraduate-courses': 403 Client Error: Forbidden for url: https://www.arts.ac.uk/colleges/chelsea-college-of-arts/courses/postgraduate-courses
+[13:16:12] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:16:13] INFO stage4_programs — → China Academy of Art (need 3 programs)
+[13:16:54] WARNING stage4_programs —   fetch failed 'https://en.caa.edu.cn/study/International_College_of_CAA.htm': HTTPSConnectionPool(host='en.caa.edu.cn', port=443): Max retries exceeded with url: /study/International_College_of_CAA.htm (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:16:55] WARNING stage4_programs —   fetch failed 'https://en.caa.edu.cn/study/Online_Open_Classes.htm': HTTPSConnectionPool(host='en.caa.edu.cn', port=443): Max retries exceeded with url: /study/Online_Open_Classes.htm (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:16:56] WARNING stage4_programs —   fetch failed 'https://en.caa.edu.cn/study/Schools___Departments/International_College.htm': HTTPSConnectionPool(host='en.caa.edu.cn', port=443): Max retries exceeded with url: /study/Schools___Departments/International_College.htm (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:17:26] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:17:27] INFO stage4_programs — → Chulalongkorn University, Faculty of Fine and Applied Arts (need 3 programs)
+[13:18:16] WARNING stage4_programs —   skip non-html 'https://www.arts.chula.ac.th/balac/wp-content/uploads/2020/02/BALAC-Brochure-Nov-09-2.pdf' (application/pdf)
+[13:18:17] WARNING stage4_programs —   skip non-html 'https://www.arts.chula.ac.th/balac/wp-content/uploads/2020/11/BALAC_early_admission_annoucement_ENGLISH_2021-1.pdf' (application/pdf)
+[13:18:19] WARNING stage4_programs —   skip non-html 'https://www.arts.chula.ac.th/balac/wp-content/uploads/2025/01/BALAC__admission_annoucement_ENGLISH_2025_20-January-2025.pdf' (application/pdf)
+[13:18:49] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:18:50] INFO stage4_programs — → Concordia University Faculty of Fine Arts (need 3 programs)
+[13:19:11] WARNING stage4_programs —   fetch failed 'https://www.concordia.ca/ﬁ nearts.html': 400 Client Error: Illegal character SPACE=' ' for url: https://www.concordia.ca/%EF%AC%81%20nearts.html
+[13:19:40] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:19:41] INFO stage4_programs — → Concordia University, Faculty of Fine Arts (need 3 programs)
+[13:20:33] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:20:34] INFO stage4_programs — → Design Academy Eindhoven (need 3 programs)
+[13:21:36] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:21:37] INFO stage4_programs — → Durban University of Technology, Faculty of Arts and Design (need 3 programs)
+[13:22:22] WARNING stage4_programs —   fetch failed 'https://www.dut.ac.za/': HTTPSConnectionPool(host='www.dut.ac.za', port=443): Max retries exceeded with url: / (Caused by NewConnectionError("HTTPSConnection(host='www.dut.ac.za', port=443): Failed to establish a new connection: [Errno 61] Connection refused"))
+[13:22:23] WARNING stage4_programs —   fetch failed 'https://www.dut.ac.za/admissions/': HTTPSConnectionPool(host='www.dut.ac.za', port=443): Max retries exceeded with url: /admissions/ (Caused by NewConnectionError("HTTPSConnection(host='www.dut.ac.za', port=443): Failed to establish a new connection: [Errno 61] Connection refused"))
+[13:22:24] WARNING stage4_programs —   fetch failed 'https://www.dut.ac.za/faculty/arts_and_design/': HTTPSConnectionPool(host='www.dut.ac.za', port=443): Max retries exceeded with url: /faculty/arts_and_design/ (Caused by NewConnectionError("HTTPSConnection(host='www.dut.ac.za', port=443): Failed to establish a new connection: [Errno 61] Connection refused"))
+[13:22:25] WARNING stage4_programs —   fetch failed 'https://www.dut.ac.za/faculty/arts_and_design/fine_art_and_jewellery_design/': HTTPSConnectionPool(host='www.dut.ac.za', port=443): Max retries exceeded with url: /faculty/arts_and_design/fine_art_and_jewellery_design/ (Caused by NewConnectionError("HTTPSConnection(host='www.dut.ac.za', port=443): Failed to establish a new connection: [Errno 61] Connection refused"))
+[13:22:26] WARNING stage4_programs —   fetch failed 'https://www.dut.ac.za/wp-content/uploads/career_leaflets/FAD%20Graphic%20Design.pdf': HTTPSConnectionPool(host='www.dut.ac.za', port=443): Max retries exceeded with url: /wp-content/uploads/career_leaflets/FAD%20Graphic%20Design.pdf (Caused by NewConnectionError("HTTPSConnection(host='www.dut.ac.za', port=443): Failed to establish a new connection: [Errno 61] Connection refused"))
+[13:22:50] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:22:51] INFO stage4_programs — → École Nationale des Arts de Dakar (need 3 programs)
+[13:23:24] WARNING stage4_programs —   fetch failed 'https://www.enadakar.sn/': HTTPSConnectionPool(host='www.enadakar.sn', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.enadakar.sn', port=443): Failed to resolve 'www.enadakar.sn' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:23:45] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:23:46] INFO stage4_programs — → École Nationale Supérieure des Arts Décoratifs (need 3 programs)
+[13:24:47] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:24:48] INFO stage4_programs — → École Nationale Supérieure des Beaux-Arts de Lyon (need 3 programs)
+[13:25:31] WARNING stage4_programs —   skip non-html 'https://www.ensba-lyon.fr/upload/document/O_procedure-incoming-students.pdf' (application/pdf)
+[13:26:02] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:26:03] INFO stage4_programs — → École Nationale Supérieure des Beaux-Arts de Paris (need 3 programs)
+[13:27:11] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:27:12] INFO stage4_programs — → Edinburgh College of Art (need 3 programs)
+[13:28:09] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:28:10] INFO stage4_programs — → Emily Carr University of Art + Design (need 3 programs)
+[13:29:05] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:29:06] INFO stage4_programs — → Emily Carr University of Art and Design (need 3 programs)
+[13:29:53] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:29:54] INFO stage4_programs — → Faculty of Architecture, Design and Urbanism, University of Buenos Aires (need 3 programs)
+[13:30:39] WARNING stage4_programs —   skip non-html 'https://centrocao.fadu.uba.ar/wp-content/uploads/2021/12/Centro-CAOTwelve-Fellowships-Report-1989-1990.pdf' (application/pdf)
+[13:31:02] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:31:04] INFO stage4_programs — → Faculty of Art and Design, National Autonomous University of Mexico (need 3 programs)
+[13:31:54] WARNING stage4_programs —   fetch failed 'https://www.fad.unam.mx/': HTTPSConnectionPool(host='www.fad.unam.mx', port=443): Max retries exceeded with url: / (Caused by ConnectTimeoutError(<HTTPSConnection(host='www.fad.unam.mx', port=443) at 0x117410ca0>, 'Connection to www.fad.unam.mx timed out. (connect timeout=25)'))
+[13:31:57] WARNING stage4_programs —   skip non-html 'https://fad.unam.mx/wp-content/uploads/2021/02/tomo_2_dcv_oficial.pdf' (application/pdf)
+[13:31:59] WARNING stage4_programs —   skip non-html 'https://fad.unam.mx/wp-content/uploads/2021/04/october-school-2019_proyecto-espanol.pdf' (application/pdf)
+[13:32:21] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:32:23] INFO stage4_programs — → Faculty of Arts of the Benemérita Autonomous University of Puebla (need 3 programs)
+[13:33:03] WARNING stage4_programs —   skip non-html 'https://repositorioinstitucional.buap.mx/bitstreams/08a30a71-8172-4987-8115-d1bdef4cb3e0/download' (application/pdf;charset=utf-8)
+[13:33:07] WARNING stage4_programs —   skip non-html 'https://repositorioinstitucional.buap.mx/bitstreams/8b9f3683-93b7-4fb0-8548-0b99341e9cd1/download' (application/pdf;charset=utf-8)
+[13:33:20] WARNING stage4_programs —   skip non-html 'https://repositorioinstitucional.buap.mx/bitstreams/fc727d13-e64a-4044-a30f-38d9aed02a2b/download' (application/pdf;charset=utf-8)
+[13:33:23] WARNING stage4_programs —   skip non-html 'https://repositorioinstitucional.buap.mx/server/api/core/bitstreams/134e3a07-cb43-4ca7-aa66-b807673a42f2/content' (application/pdf;charset=utf-8)
+[13:33:44] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:33:45] INFO stage4_programs — → Faculty of Fine Arts, Cairo University (need 3 programs)
+[13:34:02] WARNING stage4_programs —   fetch failed 'https://www.cu.edu.eg/': HTTPSConnectionPool(host='www.cu.edu.eg', port=443): Max retries exceeded with url: / (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'www.cu.edu.eg'. (_ssl.c:1007)")))
+[13:34:08] WARNING stage4_programs —   skip non-html 'http://masscomm.cu.edu.eg/AdminDepartmentFiles/Student%20Guide%202021-Final%20Version%C2%A4admin_mayada%C2%A42020-11-18%20%2010-19-6-4.pdf' (application/pdf)
+[13:34:11] WARNING stage4_programs —   skip non-html 'http://masscomm.cu.edu.eg/en/AdminDepartmentFiles/postgraduate%20programs%C2%A4eng.heba%C2%A42022-9-4%20%200-18-41-874.pdf' (application/pdf)
+[13:34:33] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:34:35] INFO stage4_programs — → Faculty of Fine Arts, University of San Carlos of Guatemala (need 3 programs)
+[13:35:24] WARNING stage4_programs —   fetch failed 'https://www.usac.edu.gt/': HTTPSConnectionPool(host='www.usac.edu.gt', port=443): Max retries exceeded with url: / (Caused by ConnectTimeoutError(<HTTPSConnection(host='www.usac.edu.gt', port=443) at 0x116749720>, 'Connection to www.usac.edu.gt timed out. (connect timeout=25)'))
+[13:35:32] WARNING stage4_programs —   skip non-html 'http://biblioteca.usac.edu.gt/EPS/07/07_10286.pdf' (application/pdf)
+[13:35:35] WARNING stage4_programs —   skip non-html 'http://biblioteca.usac.edu.gt/EPS/07/07_8194.pdf' (application/pdf)
+[13:36:01] WARNING stage4_programs —   fetch failed 'https://ceceg.usac.edu.gt/wp-content/uploads/2025/09/Popular-tradition-and-its-application-in-Guatemalan-schools.pdf': HTTPSConnectionPool(host='ceceg.usac.edu.gt', port=443): Max retries exceeded with url: /wp-content/uploads/2025/09/Popular-tradition-and-its-application-in-Guatemalan-schools.pdf (Caused by ConnectTimeoutError(<HTTPSConnection(host='ceceg.usac.edu.gt', port=443) at 0x116c66440>, 'Connection to ceceg.usac.edu.gt timed out. (connect timeout=25)'))
+[13:36:26] WARNING stage4_programs —   fetch failed 'https://ceceg.usac.edu.gt/wp-content/uploads/2025/09/la-influencia-artistica-musulmana-en-la-creacion-guatemalteca.pdf': HTTPSConnectionPool(host='ceceg.usac.edu.gt', port=443): Max retries exceeded with url: /wp-content/uploads/2025/09/la-influencia-artistica-musulmana-en-la-creacion-guatemalteca.pdf (Caused by ConnectTimeoutError(<HTTPSConnection(host='ceceg.usac.edu.gt', port=443) at 0x116c65660>, 'Connection to ceceg.usac.edu.gt timed out. (connect timeout=25)'))
+[13:36:46] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:36:48] INFO stage4_programs — → Fashion Institute of Technology (need 3 programs)
+[13:37:08] WARNING stage4_programs —   fetch failed 'https://www.fitny.edu/': HTTPSConnectionPool(host='www.fitny.edu', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.fitny.edu', port=443): Failed to resolve 'www.fitny.edu' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:37:32] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:37:33] INFO stage4_programs — → Federal University of Rio de Janeiro, School of Fine Arts (need 3 programs)
+[13:38:37] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:38:38] INFO stage4_programs — → Florida State University College of Fine Arts (need 3 programs)
+[13:39:16] WARNING stage4_programs —   fetch failed 'https://cfa.fsu.edu/': 403 Client Error: Forbidden for url: https://cfa.fsu.edu/
+[13:39:16] WARNING stage4_programs —   fetch failed 'https://cfa.fsu.edu/programs/': 403 Client Error: Forbidden for url: https://cfa.fsu.edu/programs/
+[13:39:17] WARNING stage4_programs —   fetch failed 'https://cfa.fsu.edu/programs/bfa-music-theatre/': 403 Client Error: Forbidden for url: https://cfa.fsu.edu/programs/bfa-music-theatre/
+[13:39:17] WARNING stage4_programs —   fetch failed 'https://cfa.fsu.edu/programs/bfa-studio-art/': 403 Client Error: Forbidden for url: https://cfa.fsu.edu/programs/bfa-studio-art/
+[13:39:42] INFO stage4_programs —   ✓ inserted 2 program(s) for this school
+[13:39:43] INFO stage4_programs — → George Mason University School of Art (need 3 programs)
+[13:40:03] WARNING stage4_programs —   fetch failed 'https://arts.gmu.edu/': HTTPSConnectionPool(host='arts.gmu.edu', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='arts.gmu.edu', port=443): Failed to resolve 'arts.gmu.edu' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:40:27] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:40:28] INFO stage4_programs — → Hamburg University of Fine Arts (need 3 programs)
+[13:41:30] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:41:31] INFO stage4_programs — → HDK-Valand Academy of Art and Design, University of Gothenburg (need 3 programs)
+[13:42:21] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:42:22] INFO stage4_programs — → Helwan University, Faculty of Fine Arts (need 3 programs)
+[13:43:15] WARNING stage4_programs —   fetch failed 'https://arts-en.helwan.edu.eg/?page_id=225': HTTPSConnectionPool(host='arts-en.helwan.edu.eg', port=443): Max retries exceeded with url: /?page_id=225 (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1007)')))
+[13:43:42] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:43:44] INFO stage4_programs — → Herron School of Art and Design (need 3 programs)
+[13:44:10] WARNING stage4_programs —   fetch failed 'https://herron.indiana.edu/': HTTPSConnectionPool(host='herron.indiana.edu', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='herron.indiana.edu', port=443): Failed to resolve 'herron.indiana.edu' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:44:32] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:44:33] INFO stage4_programs — → Higher Institute of Art (need 3 programs)
+[13:44:49] WARNING stage4_programs —   fetch failed 'https://www.isa.cu/': HTTPSConnectionPool(host='www.isa.cu', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.isa.cu', port=443): Failed to resolve 'www.isa.cu' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:45:18] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:45:19] INFO stage4_programs — → Hixson-Lied College of Fine and Performing Arts, University of Nebraska–Lincoln (need 3 programs)
+[13:45:36] WARNING stage4_programs —   fetch failed 'https://hixsonlied.unl.edu/': HTTPSConnectionPool(host='hixsonlied.unl.edu', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='hixsonlied.unl.edu', port=443): Failed to resolve 'hixsonlied.unl.edu' ([Errno 8] nodename nor servname provided, or not known)"))
+[13:46:01] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:46:02] INFO stage4_programs — → HKU University of the Arts Utrecht (need 3 programs)
+[13:46:57] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:46:58] INFO stage4_programs — → Hong Kong Art School (need 3 programs)
+[13:48:03] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:48:04] INFO stage4_programs — → Hongik University (need 3 programs)
+[13:49:18] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:49:20] INFO stage4_programs — → Indonesian Institute of the Arts Yogyakarta (need 3 programs)
+[13:50:42] INFO stage4_programs —   ✓ inserted 3 program(s) for this school
+[13:50:44] INFO stage4_programs — → Kenya College of Art and Design (need 3 programs)
+Traceback (most recent call last):
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/http/client.py", line 1375, in getresponse
+    response.begin()
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/http/client.py", line 318, in begin
+    version, status, reason = self._read_status()
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/http/client.py", line 279, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/socket.py", line 705, in readinto
+    return self._sock.recv_into(b)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/ssl.py", line 1307, in recv_into
+    return self.read(nbytes, buffer)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/ssl.py", line 1163, in read
+    return self._sslobj.read(len, buffer)
+TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/adapters.py", line 645, in send
+    resp = conn.urlopen(
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/util/retry.py", line 490, in increment
+    raise reraise(type(error), error, _stacktrace)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/util/util.py", line 39, in reraise
+    raise value
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/urllib3/connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='api.tavily.com', port=443): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/run_pipeline.py", line 131, in <module>
+    main()
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/run_pipeline.py", line 121, in main
+    run(settings, batch_size)
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/pipeline/stage4_programs.py", line 523, in run
+    evidence = _build_evidence(settings, school)
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/pipeline/stage4_programs.py", line 260, in _build_evidence
+    for result in _tavily_search(settings.tavily_api_key, query):
+  File "/Users/jy/Desktop/1_Personal_Proj_202601/yjxauto/pipeline/stage4_programs.py", line 175, in _tavily_search
+    resp = requests.post(
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 592, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 706, in send
+    r = adapter.send(request, **kwargs)
+  File "/Users/jy/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/adapters.py", line 691, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='api.tavily.com', port=443): Read timed out. (read timeout=30)

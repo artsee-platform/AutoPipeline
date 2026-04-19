@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 from config.settings import Settings
-from db.supabase_client import get_client, upsert_school
+from db.supabase_client import TABLE, get_client, upsert_school
 from utils.logger import get_logger
 
 log = get_logger("stage0")
@@ -47,7 +47,7 @@ def run(settings: Settings) -> None:
     client = get_client(settings)
 
     # Fetch existing rows to detect new vs existing and avoid website unique violations
-    resp = client.table("schools_auto").select("name_en, official_website").execute()
+    resp = client.table(TABLE).select("name_en, official_website").execute()
     existing = set()
     existing_websites = set()
     if resp.data:
@@ -68,10 +68,10 @@ def run(settings: Settings) -> None:
         if school["name_en"] in existing:
             # Update seed fields only — do NOT touch status or any enrichment data
             seed_fields = {k: school[k] for k in ("name_zh", "country", "official_website")}
-            client.table("schools_auto").update(seed_fields).eq("name_en", school["name_en"]).execute()
+            client.table(TABLE).update(seed_fields).eq("name_en", school["name_en"]).execute()
             updated += 1
         else:
-            client.table("schools_auto").insert(school).execute()
+            client.table(TABLE).insert(school).execute()
             inserted += 1
 
     log.info(f"Seeded {inserted} new rows, updated {updated} existing seed fields")

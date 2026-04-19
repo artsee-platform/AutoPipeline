@@ -5,7 +5,7 @@ from utils.logger import get_logger
 
 log = get_logger("supabase")
 
-TABLE = "schools_auto"
+TABLE = "schools"
 
 
 def get_client(settings: Settings) -> Client:
