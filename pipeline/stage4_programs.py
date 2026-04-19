@@ -1,7 +1,8 @@
 """Stage 4 — For each school in `schools`, add up to 3 degree programs into `programs`.
 
-Uses Tavily search + Claude to extract evidence-backed program rows. Skips schools that
-already have three or more programs.
+Uses Tavily search (optionally with raw page excerpts from Tavily), HTTP fetches of
+same-domain official URLs for longer text, then Claude to extract evidence-backed rows.
+Skips schools that already have three or more programs.
 
 Requires `programs.school_id` to be uuid FK to `schools.id`. If inserts fail with a
 type error, apply db/fix_programs_school_id.sql in the Supabase SQL editor first.
@@ -17,6 +18,7 @@ from urllib.parse import urlparse
 
 import anthropic
 import requests
+from bs4 import BeautifulSoup
 
 from config.settings import Settings
 from db.supabase_client import get_client
@@ -29,8 +31,25 @@ TAVILY_URL = "https://api.tavily.com/search"
 PROGRAMS_TABLE = "programs"
 SCHOOLS_TABLE = "schools"
 
+# Evidence budget: richer than short snippets alone, still bounded for API cost/latency.
+TAVILY_SNIPPET_MAX = 2500
+MAX_TAVILY_BLOCKS = 18
+MAX_DEEP_FETCH_PAGES = 5
+PAGE_EXTRACT_MAX = 10000
+EVIDENCE_TOTAL_SOFT_MAX = 120_000
+
+FETCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
 SYSTEM_PROMPT = """You are a research assistant for university art/design admissions data.
-You receive web search snippets only. Use ONLY that evidence — do not invent facts.
+You receive web search snippets, optional Tavily raw excerpts, and optional extracted text
+from official-site pages. Use ONLY that evidence — do not invent facts.
 Return ONLY valid JSON (no markdown). If the evidence does not support a field, use null.
 Use English for all text fields. Booleans must be true/false, not strings."""
 
@@ -133,10 +152,26 @@ def _domain_from_url(url: str) -> str:
     if not url:
         return ""
     parsed = urlparse(url)
-    return parsed.netloc.replace("www.", "")
+    return parsed.netloc.replace("www.", "").lower()
 
 
-def _tavily_search(api_key: str, query: str) -> list[dict]:
+def _netloc_key(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        return urlparse(url).netloc.replace("www.", "").lower()
+    except Exception:
+        return ""
+
+
+def _url_on_domain(url: str, school_domain: str) -> bool:
+    if not school_domain or not url:
+        return False
+    nl = _netloc_key(url)
+    return nl == school_domain or nl.endswith("." + school_domain)
+
+
+def _tavily_search(api_key: str, query: str, *, include_raw_content: bool = True) -> list[dict]:
     resp = requests.post(
         TAVILY_URL,
         headers={
@@ -148,7 +183,7 @@ def _tavily_search(api_key: str, query: str) -> list[dict]:
             "search_depth": "advanced",
             "topic": "general",
             "max_results": 5,
-            "include_raw_content": False,
+            "include_raw_content": include_raw_content,
             "include_answer": False,
         },
         timeout=30,
@@ -158,10 +193,53 @@ def _tavily_search(api_key: str, query: str) -> list[dict]:
     return data.get("results") or []
 
 
+def _extract_visible_text(html: str, max_chars: int) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    text = soup.get_text(separator="\n", strip=True)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    out = "\n".join(lines)
+    if len(out) > max_chars:
+        out = out[:max_chars] + "\n...[truncated]"
+    return out
+
+
+def _fetch_official_page_text(url: str, max_chars: int) -> str | None:
+    if not url or not url.startswith(("http://", "https://")):
+        return None
+    try:
+        resp = requests.get(url, headers=FETCH_HEADERS, timeout=25, allow_redirects=True)
+        resp.raise_for_status()
+    except Exception as exc:
+        log.warning(f"  fetch failed {url!r}: {exc}")
+        return None
+    ctype = (resp.headers.get("Content-Type") or "").lower()
+    if "pdf" in ctype or "msword" in ctype or "wordprocessingml" in ctype:
+        log.warning(f"  skip non-html {url!r} ({ctype})")
+        return None
+    if "html" not in ctype and "text/plain" not in ctype and "xml" not in ctype:
+        # Many servers omit charset; still try if body looks like HTML.
+        if "<html" not in resp.text[:2000].lower() and "<!doctype html" not in resp.text[:200].lower():
+            log.warning(f"  skip likely non-html {url!r} ({ctype})")
+            return None
+    try:
+        return _extract_visible_text(resp.text, max_chars)
+    except Exception as exc:
+        log.warning(f"  parse failed {url!r}: {exc}")
+        return None
+
+
+def _trim_evidence_total(text: str, soft_max: int) -> str:
+    if len(text) <= soft_max:
+        return text
+    return text[:soft_max] + "\n\n...[evidence truncated for size]"
+
+
 def _build_evidence(settings: Settings, school: dict) -> str:
     name_en = school.get("name_en") or ""
     name_zh = school.get("name_zh") or ""
-    website = school.get("official_website") or ""
+    website = (school.get("official_website") or "").strip()
     country = school.get("country") or ""
     domain = _domain_from_url(website)
 
@@ -174,28 +252,59 @@ def _build_evidence(settings: Settings, school: dict) -> str:
         queries.append(f"{name_en} {name_zh} 专业 课程 学位")
     if domain:
         queries.append(f"{name_en} site:{domain} programs courses admissions")
+        queries.append(f"site:{domain} admissions portfolio requirements degree duration")
 
     blocks: list[str] = []
     seen_urls: set[str] = set()
     for query in queries:
         for result in _tavily_search(settings.tavily_api_key, query):
-            url = result.get("url") or ""
-            if url in seen_urls:
+            url = (result.get("url") or "").strip()
+            if not url or url in seen_urls:
                 continue
             seen_urls.add(url)
             title = (result.get("title") or "").strip()
+            raw = (result.get("raw_content") or "").strip()
             content = (result.get("content") or "").strip()
-            if len(content) > 500:
-                content = content[:500] + "..."
-            blocks.append(f"Title: {title}\nURL: {url}\nSnippet: {content}")
-            if len(blocks) >= 14:
+            body = raw if raw else content
+            if len(body) > TAVILY_SNIPPET_MAX:
+                body = body[: TAVILY_SNIPPET_MAX] + "..."
+            label = "Excerpt" if raw else "Snippet"
+            blocks.append(f"Title: {title}\nURL: {url}\n{label}: {body}")
+            if len(blocks) >= MAX_TAVILY_BLOCKS:
                 break
-        if len(blocks) >= 14:
+        if len(blocks) >= MAX_TAVILY_BLOCKS:
             break
+
+    # Deep-fetch a few same-domain pages (homepage from sheet + Tavily hits on that domain).
+    deep_urls: list[str] = []
+    seen_deep: set[str] = set()
+    if website.startswith(("http://", "https://")):
+        deep_urls.append(website)
+        seen_deep.add(website)
+    if domain:
+        for u in sorted(seen_urls):
+            if len(deep_urls) >= MAX_DEEP_FETCH_PAGES:
+                break
+            if u in seen_deep or not _url_on_domain(u, domain):
+                continue
+            deep_urls.append(u)
+            seen_deep.add(u)
+    deep_urls = deep_urls[:MAX_DEEP_FETCH_PAGES]
+
+    for i, page_url in enumerate(deep_urls):
+        if i > 0:
+            time.sleep(0.35)
+        extracted = _fetch_official_page_text(page_url, PAGE_EXTRACT_MAX)
+        if not extracted:
+            continue
+        blocks.append(
+            f"Source: official-site page extract\nURL: {page_url}\nText:\n{extracted}"
+        )
 
     if not blocks:
         return "No web evidence found."
-    return "\n\n".join(blocks)
+    joined = "\n\n".join(blocks)
+    return _trim_evidence_total(joined, EVIDENCE_TOTAL_SOFT_MAX)
 
 
 def _parse_json_object(text: str, context: str) -> dict:
