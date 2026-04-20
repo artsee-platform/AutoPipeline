@@ -9,7 +9,8 @@ Usage:
   python run_pipeline.py --stage 3 --batch 10         # video metadata
   python run_pipeline.py --stage 4 --batch 5          # seed programs (Tavily + Claude)
   python run_pipeline.py --stage 4 --batch 200 --reset-programs  # wipe programs, re-seed all schools
-  python run_pipeline.py --stage 5 --batch 10         # program fees / admissions / evaluations / art tags
+  python run_pipeline.py --stage 5 --batch 10         # fees / admissions / evaluations (no art links)
+  python run_pipeline.py --stage 5 --batch 10 --fill-art-categories  # also program_art_categories
   python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
   python run_pipeline.py                              # default: runs stages 0-3
   python run_pipeline.py --retry-errors               # reset error rows → pending
@@ -57,6 +58,11 @@ def main():
         "--reset-programs",
         action="store_true",
         help="With --stage 4: delete all rows in programs before seeding (full re-run with current strategy)",
+    )
+    parser.add_argument(
+        "--fill-art-categories",
+        action="store_true",
+        help="With --stage 5: also fill program_art_categories (default: only fees/admissions/evaluations)",
     )
     args = parser.parse_args()
 
@@ -131,7 +137,7 @@ def main():
 
         elif stage == 5:
             from pipeline.stage5_program_satellite import run
-            run(settings, batch_size)
+            run(settings, batch_size, fill_art_categories=args.fill_art_categories)
 
         else:
             log.error(f"Unknown stage: {stage}")

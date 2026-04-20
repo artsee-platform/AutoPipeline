@@ -1,8 +1,12 @@
-"""Stage 5 — Fill satellite tables for each `programs` row: fees, admissions, evaluations, art categories.
+"""Stage 5 — Fill satellite tables for each `programs` row: fees, admissions, evaluations;
+optionally `program_art_categories` when `fill_art_categories=True`.
 
 Uses the same Tavily + official-page evidence pattern as Stage 4 (`pipeline.evidence`), then one
 Claude call per program to extract structured rows. Skips tables that already have a row for
 that `program_id` (re-runs complete partial fills).
+
+Field semantics: optional glossary in `FIELD_GLOSSARY_APPEND` (edit this file) is appended to the
+user prompt so Tavily/Claude align with your product meanings — add definitions when ready.
 
 `schools` enrichment for new institutions remains Stages 1–3; this stage only enriches program-level
 satellite data after `programs` rows exist (typically from Stage 4).
@@ -30,6 +34,9 @@ EVAL_TABLE = "program_evaluations"
 ART_CAT_LINK_TABLE = "program_art_categories"
 ART_CATEGORIES_TABLE = "art_categories"
 
+# Optional: paste short per-field definitions (English) to steer extraction; appended to the prompt.
+FIELD_GLOSSARY_APPEND = ""
+
 SYSTEM_PROMPT = """You are a research assistant for university program-level admissions and fees.
 You receive web search snippets and page extracts. Use ONLY that evidence — do not invent facts.
 Return ONLY valid JSON (no markdown). Use null when evidence does not support a field.
@@ -46,18 +53,22 @@ def _user_template_satellite(
     degree_type: str,
     category_catalog: str,
     evidence_text: str,
+    *,
+    fill_art_categories: bool,
+    field_glossary: str,
 ) -> str:
-    return f"""Institution (English): {school_en}
+    glossary_block = ""
+    if field_glossary.strip():
+        glossary_block = f"\nField glossary (product definitions):\n{field_glossary.strip()}\n"
+
+    core = f"""Institution (English): {school_en}
 Institution (Chinese, if any): {school_zh}
 Country/region: {country}
 Official website: {website}
 
 Program name: {program_name}
 Degree type (if any): {degree_type}
-
-Valid art category ids (choose zero or more ids that best match this program; ids are integers):
-{category_catalog}
-
+{glossary_block}
 Web evidence:
 {evidence_text}
 
@@ -71,10 +82,23 @@ Return a single JSON object with exactly these keys:
   regular_deadline (string|null), toefl_ibt (integer|null)
 - evaluation: object with keys: acceptance_rate (number|null, 0-1 or percentage as 0.xx if evidence),
   application_difficulty_score (string|null, max 20 chars), competition_level (string|null, max 50 chars),
-  data_source (string|null, max 100 chars), evidence_note (string|null), source_url (string|null)
+  data_source (string|null, max 100 chars), evidence_note (string|null), source_url (string|null)"""
+
+    if not fill_art_categories:
+        return core + "\n\nUse null for any field not supported by evidence."
+
+    return (
+        core
+        + f"""
+
+Valid art category ids (choose zero or more ids that best match this program; ids are integers):
+{category_catalog}
+
+Also include key:
 - art_category_ids: array of integers — subset of the valid ids listed above; empty array if none fit
 
 Use null for any field not supported by evidence."""
+    )
 
 
 def _parse_json_object(text: str, context: str) -> dict:
@@ -181,12 +205,26 @@ def _needs_satellite(client, program_id: str) -> bool:
 
 
 def _load_art_categories(client) -> tuple[str, set[int]]:
-    resp = (
-        client.table(ART_CATEGORIES_TABLE)
-        .select("id,name_en,name_zh")
-        .order("id")
-        .execute()
-    )
+    """Return only level-2 categories; programs should not be linked to level-1 faculties.
+
+    Tolerates pre-hierarchy databases that lack the `level` column by falling back to all rows.
+    """
+    try:
+        resp = (
+            client.table(ART_CATEGORIES_TABLE)
+            .select("id,name_en,name_zh,level,is_active")
+            .eq("level", 2)
+            .eq("is_active", True)
+            .order("id")
+            .execute()
+        )
+    except Exception:
+        resp = (
+            client.table(ART_CATEGORIES_TABLE)
+            .select("id,name_en,name_zh")
+            .order("id")
+            .execute()
+        )
     valid: set[int] = set()
     lines: list[str] = []
     for r in resp.data or []:
@@ -322,11 +360,20 @@ def _replace_art_links(client, program_id: str, category_ids: list[int], valid: 
         ).execute()
 
 
-def run(settings: Settings, batch_size: int) -> None:
+def run(
+    settings: Settings,
+    batch_size: int,
+    *,
+    fill_art_categories: bool = False,
+) -> None:
     client = get_client(settings)
     claude = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    category_catalog, valid_ids = _load_art_categories(client)
+    if fill_art_categories:
+        category_catalog, valid_ids = _load_art_categories(client)
+    else:
+        category_catalog, valid_ids = "(art categorization disabled for this run)", set()
+        log.info("Stage 5: skipping program_art_categories (use --fill-art-categories to enable)")
 
     processed = 0
     inserted_fees = inserted_adm = inserted_eval = art_runs = 0
@@ -374,6 +421,8 @@ def run(settings: Settings, batch_size: int) -> None:
                 prog.get("degree_type") or "",
                 category_catalog,
                 ev_text,
+                fill_art_categories=fill_art_categories,
+                field_glossary=FIELD_GLOSSARY_APPEND,
             )
             data = _claude_satellite(claude, user_prompt)
             fees = data.get("fees") if isinstance(data.get("fees"), dict) else {}
@@ -398,7 +447,7 @@ def run(settings: Settings, batch_size: int) -> None:
                 if not _has_row(client, EVAL_TABLE, pid):
                     _insert_evaluation(client, pid, eva)
                     inserted_eval += 1
-                if _art_link_count(client, pid) < 1:
+                if fill_art_categories and _art_link_count(client, pid) < 1:
                     link_ids = art_ids
                     if not link_ids:
                         link_ids = _fallback_art_ids_from_program_category(

@@ -1,9 +1,11 @@
 {
-  "_comment": "Maps DB name_en → exact QS institution name (as it appears in the Excel/CSV).",
-  "_usage": "Add entries here for abbreviations, translated names, alternate spellings, and historical naming variants. Run stage2 again after editing this file.",
-  "_examples_remove_before_use": {
-    "MIT": "Massachusetts Institute of Technology (MIT)",
-    "RCA": "Royal College of Art",
-    "Central Saint Martins": "Central Saint Martins, University of the Arts London"
-  }
+  "_policy": "DB name_en -> QS INSTITUTION string as in data/qs_data_subject.xlsx or qs_data_metrics.csv. Used when a faculty/college should inherit the parent university's QS rows. Keys starting with '_' are ignored by the matcher.",
+  "Central Saint Martins": "University of the Arts London",
+  "London College of Communication": "University of the Arts London",
+  "London College of Fashion": "University of the Arts London",
+  "Camberwell College of Arts, University of the Arts London": "University of the Arts London",
+  "Camberwell College of Arts": "University of the Arts London",
+  "Ruskin School of Art": "University of Oxford",
+  "Queen Margaret University": "Queen Margaret University , Edinburgh",
+  "University of Northampton": "The University of Northampton"
 }
