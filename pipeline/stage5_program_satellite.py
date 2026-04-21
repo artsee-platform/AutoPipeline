@@ -411,20 +411,30 @@ def run(
                 (prog.get("program_name") or "")[:80],
             )
 
-            ev_text = evidence.build_evidence_for_program_detail(settings, school, prog)
-            user_prompt = _user_template_satellite(
-                name_en,
-                name_zh or "",
-                country or "",
-                website or "unknown",
-                prog.get("program_name") or "",
-                prog.get("degree_type") or "",
-                category_catalog,
-                ev_text,
-                fill_art_categories=fill_art_categories,
-                field_glossary=FIELD_GLOSSARY_APPEND,
-            )
-            data = _claude_satellite(claude, user_prompt)
+            # One program's upstream failure (Tavily 5xx, network DNS, Claude timeout, etc.)
+            # must not abort the whole batch. Log and continue; Stage 5 is idempotent, a later
+            # run will retry this row because `_needs_satellite` will still return True.
+            try:
+                ev_text = evidence.build_evidence_for_program_detail(settings, school, prog)
+                user_prompt = _user_template_satellite(
+                    name_en,
+                    name_zh or "",
+                    country or "",
+                    website or "unknown",
+                    prog.get("program_name") or "",
+                    prog.get("degree_type") or "",
+                    category_catalog,
+                    ev_text,
+                    fill_art_categories=fill_art_categories,
+                    field_glossary=FIELD_GLOSSARY_APPEND,
+                )
+                data = _claude_satellite(claude, user_prompt)
+            except Exception as exc:
+                log.error("  evidence/claude failed, skipping: %s", exc)
+                processed += 1
+                time.sleep(1.0)
+                continue
+
             fees = data.get("fees") if isinstance(data.get("fees"), dict) else {}
             adm = data.get("admissions") if isinstance(data.get("admissions"), dict) else {}
             eva = data.get("evaluation") if isinstance(data.get("evaluation"), dict) else {}
