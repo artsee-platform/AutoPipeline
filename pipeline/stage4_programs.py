@@ -21,6 +21,7 @@ import requests
 from config.settings import Settings
 from db.supabase_client import TABLE as SCHOOLS_TABLE, get_client
 from pipeline import evidence
+from pipeline.degree_normalizer import normalize_degree
 from utils.logger import get_logger
 from utils.retry import retry
 
@@ -231,10 +232,22 @@ def _row_for_insert(raw: dict, school: dict, evidence: str) -> dict | None:
     if not name:
         return None
 
+    # The LLM extracts the free-text degree label; normalization (canonical
+    # short label, family bucket, honours / combined-degree flags) is derived
+    # locally so the schema stays consistent with the backfilled historical
+    # rows — see pipeline/degree_normalizer.py for the mapping rules.
+    raw_degree = _nullable_str(raw.get("degree_type"))
+    degree_fields = normalize_degree(raw_degree)
+
     payload_for_hash = {
         "school_id": school["id"],
         "program_name": name,
-        "degree_type": raw.get("degree_type"),
+        "raw_degree_type": raw_degree,
+        "normalized_degree_type": degree_fields["normalized_degree_type"],
+        "degree_family": degree_fields["degree_family"],
+        "honours_flag": degree_fields["honours_flag"],
+        "combined_degree_flag": degree_fields["combined_degree_flag"],
+        "combined_with": degree_fields["combined_with"],
         "degree_full_name": raw.get("degree_full_name"),
         "program_category": raw.get("program_category"),
         "program_code": raw.get("program_code"),
@@ -267,7 +280,12 @@ def _row_for_insert(raw: dict, school: dict, evidence: str) -> dict | None:
         "school_name_en": school.get("name_en"),
         "school_name_zh": school.get("name_zh"),
         "program_name": name,
-        "degree_type": _nullable_str(raw.get("degree_type")),
+        "raw_degree_type": raw_degree,
+        "normalized_degree_type": degree_fields["normalized_degree_type"],
+        "degree_family": degree_fields["degree_family"],
+        "honours_flag": degree_fields["honours_flag"],
+        "combined_degree_flag": degree_fields["combined_degree_flag"],
+        "combined_with": degree_fields["combined_with"],
         "degree_full_name": _nullable_str(raw.get("degree_full_name")),
         "program_category": _nullable_str(raw.get("program_category")),
         "program_code": _nullable_str(raw.get("program_code")),

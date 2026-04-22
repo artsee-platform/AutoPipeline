@@ -212,7 +212,11 @@ def build_evidence_for_program_detail(
     country = school.get("country") or ""
     domain = domain_from_url(website)
     pname = (program.get("program_name") or "").strip()
-    deg = (program.get("degree_type") or "").strip()
+    deg = (
+        program.get("normalized_degree_type")
+        or program.get("raw_degree_type")
+        or ""
+    ).strip()
 
     queries = [
         f'"{pname}" {name_en} tuition fee international overseas home domestic {country}',

@@ -293,7 +293,8 @@ def _fetch_programs_page(client, start: int, page_size: int) -> list[dict]:
     resp = (
         client.table(PROGRAMS_TABLE)
         .select(
-            "id,program_name,degree_type,program_category,school_id,school_name_en,school_name_zh"
+            "id,program_name,raw_degree_type,normalized_degree_type,program_category,"
+            "school_id,school_name_en,school_name_zh"
         )
         .order("program_name")
         .range(start, end)
@@ -422,7 +423,7 @@ def run(
                     country or "",
                     website or "unknown",
                     prog.get("program_name") or "",
-                    prog.get("degree_type") or "",
+                    prog.get("normalized_degree_type") or prog.get("raw_degree_type") or "",
                     category_catalog,
                     ev_text,
                     fill_art_categories=fill_art_categories,
