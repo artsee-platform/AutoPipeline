@@ -4,7 +4,7 @@ import anthropic
 from config.settings import Settings
 from db.supabase_client import get_client, fetch_by_status, update_status, upsert_school
 from scrapers.claude_researcher import research_school
-from scrapers.website_scraper import scrape_school_website
+from scrapers.website_scraper import scrape_school_website_smart
 from utils.logger import get_logger
 
 log = get_logger("stage1")
@@ -34,8 +34,13 @@ def run(settings: Settings, batch_size: int) -> None:
                 website=school.get("official_website") or "",
             )
 
-            # 2. Website scraping for logo + images
-            site_data = scrape_school_website(school.get("official_website") or "")
+            # 2. Website scraping for logo + images (headless browser + Claude vision,
+            #    with static-HTML fallback)
+            site_data = scrape_school_website_smart(
+                school.get("official_website") or "",
+                school_name=name_en,
+                claude=claude,
+            )
 
             # 3. Merge: web_data wins for text fields; site_data for media
             merged = {**school, **web_data, **site_data, "status": "enriched"}

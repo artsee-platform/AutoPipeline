@@ -14,6 +14,9 @@ Usage:
   python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
   python run_pipeline.py                              # default: runs stages 0-3
   python run_pipeline.py --retry-errors               # reset error rows → pending
+  python run_pipeline.py --refresh-media --batch 20                   # re-scrape ONLY logo + campus for schools missing them
+  python run_pipeline.py --refresh-media --force-all --batch 50       # re-scrape media for every school
+  python run_pipeline.py --refresh-media --schools "Royal College of Art,Parsons School of Design"
 """
 import argparse
 import sys
@@ -64,6 +67,23 @@ def main():
         action="store_true",
         help="With --stage 5: also fill program_art_categories (default: only fees/admissions/evaluations)",
     )
+    parser.add_argument(
+        "--refresh-media",
+        action="store_true",
+        help="Re-scrape ONLY logo_url and campus_image_urls (headless + Claude vision). "
+             "Skips all other fields. By default only targets schools missing those fields.",
+    )
+    parser.add_argument(
+        "--force-all",
+        action="store_true",
+        help="With --refresh-media: ignore the 'missing media' filter and reprocess every school.",
+    )
+    parser.add_argument(
+        "--schools",
+        type=str,
+        default=None,
+        help="With --refresh-media: comma-separated list of name_en to restrict to.",
+    )
     args = parser.parse_args()
 
     try:
@@ -79,6 +99,21 @@ def main():
     if args.retry_errors:
         from db.supabase_client import get_client, reset_errors_to_pending
         reset_errors_to_pending(get_client(settings))
+        return
+
+    # Handle --refresh-media (standalone mode — ignores --stage)
+    if args.refresh_media:
+        from pipeline.refresh_media import run as refresh_media_run
+        names = (
+            [n.strip() for n in args.schools.split(",") if n.strip()]
+            if args.schools else None
+        )
+        refresh_media_run(
+            settings,
+            batch_size=batch_size,
+            all_schools=args.force_all,
+            names=names,
+        )
         return
 
     # Determine which stages to run
