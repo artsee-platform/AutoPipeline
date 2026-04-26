@@ -232,10 +232,11 @@ def _row_for_insert(raw: dict, school: dict, evidence: str) -> dict | None:
     if not name:
         return None
 
-    # The LLM extracts the free-text degree label; normalization (canonical
-    # short label, family bucket, honours / combined-degree flags) is derived
-    # locally so the schema stays consistent with the backfilled historical
-    # rows — see pipeline/degree_normalizer.py for the mapping rules.
+    # The LLM emits the free-text degree label; normalization to a controlled
+    # vocabulary code (and the honours flag) is derived locally so the schema
+    # stays consistent with the backfilled historical rows. Family / combined
+    # metadata is no longer stored on the row — it lives on degree_labels and
+    # is joined in when needed. See pipeline/degree_normalizer.py.
     raw_degree = _nullable_str(raw.get("degree_type"))
     degree_fields = normalize_degree(raw_degree)
 
@@ -244,10 +245,7 @@ def _row_for_insert(raw: dict, school: dict, evidence: str) -> dict | None:
         "program_name": name,
         "raw_degree_type": raw_degree,
         "normalized_degree_type": degree_fields["normalized_degree_type"],
-        "degree_family": degree_fields["degree_family"],
         "honours_flag": degree_fields["honours_flag"],
-        "combined_degree_flag": degree_fields["combined_degree_flag"],
-        "combined_with": degree_fields["combined_with"],
         "degree_full_name": raw.get("degree_full_name"),
         "program_category": raw.get("program_category"),
         "program_code": raw.get("program_code"),
@@ -282,10 +280,7 @@ def _row_for_insert(raw: dict, school: dict, evidence: str) -> dict | None:
         "program_name": name,
         "raw_degree_type": raw_degree,
         "normalized_degree_type": degree_fields["normalized_degree_type"],
-        "degree_family": degree_fields["degree_family"],
         "honours_flag": degree_fields["honours_flag"],
-        "combined_degree_flag": degree_fields["combined_degree_flag"],
-        "combined_with": degree_fields["combined_with"],
         "degree_full_name": _nullable_str(raw.get("degree_full_name")),
         "program_category": _nullable_str(raw.get("program_category")),
         "program_code": _nullable_str(raw.get("program_code")),

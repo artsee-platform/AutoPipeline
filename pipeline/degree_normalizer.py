@@ -1,36 +1,49 @@
 """Canonical normalization for `programs.raw_degree_type`.
 
-Takes the free-text degree label (e.g. "B.Des.", "BA (Hons)", "BA/MArch",
-"Licenciatura", "Ph.D.", "Other") and produces five structured fields:
+Maps a free-text degree label (e.g. "B.Des.", "BA (Hons)", "BA/MArch",
+"Licenciatura", "Ph.D.", "Other") to a controlled vocabulary held in the
+`degree_labels` dictionary table.
 
-    normalized_degree_type : canonical short label (BDes, PhD, BA, Master, ...)
-                             — None when the raw text cannot be identified.
-    degree_family          : Bachelor / Master / Doctorate / Diploma / Other
+Public API
+----------
+`normalize_degree(raw)` returns the two fields written into `programs`:
+
+    normalized_degree_type : code from `degree_labels` (e.g. "BDes", "PhD",
+                             "BA/MArch") — or None when the raw text cannot
+                             be confidently mapped.
     honours_flag           : True when the raw text carries (Hons)/(Honours).
-    combined_degree_flag   : True for joint/double degrees (e.g. "BA/MArch").
-    combined_with          : Canonical parts of a combined degree, else None.
 
-Design note: the raw text itself is kept in `raw_degree_type`. We never mutate
-or discard it here — downstream analytics use the canonical fields, but the
-original wording stays available for audits and edge-case review.
+`iter_label_catalog()` yields the full controlled vocabulary (single +
+combined entries) so `scripts/sync_degree_labels.py` can keep the dictionary
+table aligned with this module without duplicating the source of truth.
 
-This mirrors the design described in the `programs.degree_type` cleanup plan:
-preserve raw → add normalized + family + flags → so joint degrees, honours
-markers, and national-system variants (Licenciatura / Licence) stop
-contaminating a single mixed-layer column.
+Design note
+-----------
+The original wording stays in `raw_degree_type` (audit trail). All other
+metadata that used to live as columns on `programs` (`degree_family`,
+`combined_degree_flag`, `combined_with`) is now an attribute of the
+controlled vocabulary itself — joined in via `degree_labels` when needed.
+
+Combined degrees are NOT a Cartesian product. Only the patterns explicitly
+listed in `_COMBINED_CATALOG` map to a non-null `normalized_degree_type`;
+unknown combinations fall through to None so they surface for review.
 """
 from __future__ import annotations
 
 import re
-from typing import Optional, TypedDict
+from typing import Iterator, Optional, TypedDict
 
 
 class DegreeFields(TypedDict):
     normalized_degree_type: Optional[str]
-    degree_family: str
     honours_flag: bool
-    combined_degree_flag: bool
-    combined_with: Optional[list[str]]
+
+
+class DegreeLabel(TypedDict):
+    code: str
+    family: str
+    is_combined: bool
+    parts: Optional[list[str]]
 
 
 BACHELOR = "Bachelor"
@@ -39,31 +52,30 @@ DOCTORATE = "Doctorate"
 DIPLOMA = "Diploma"
 OTHER = "Other"
 
-# Highest-wins ordering for combined-degree family resolution.
 _FAMILY_RANK = {OTHER: 0, DIPLOMA: 1, BACHELOR: 2, MASTER: 3, DOCTORATE: 4}
 
-# Canonical label -> family. Keys are the values written to
-# normalized_degree_type; add new canonicals here when the catalog grows.
+# Single-degree canonicals. Code -> family. These are the atomic vocabulary
+# items; every code listed here must be present in the `degree_labels` table.
 _CANONICAL_FAMILY: dict[str, str] = {
-    # Bachelor-level (specific)
+    # Bachelor (specific)
     "BA": BACHELOR, "BSc": BACHELOR, "BS": BACHELOR, "BFA": BACHELOR,
     "BDes": BACHELOR, "BEng": BACHELOR, "BArch": BACHELOR, "BMus": BACHELOR,
     "BBA": BACHELOR, "LLB": BACHELOR,
-    # Bachelor-level (specific, art/design long tail)
+    # Bachelor (specific, art/design long tail)
     "BEd": BACHELOR, "BEnvD": BACHELOR, "BAS": BACHELOR, "BAFT": BACHELOR,
     "BVA": BACHELOR, "BDI": BACHELOR, "BID": BACHELOR,
-    # Bachelor-level (generic / national variants)
+    # Bachelor (generic / national variants)
     "Bachelor": BACHELOR,
     "Licenciatura": BACHELOR,
     "Specialist": BACHELOR,  # 5-year post-Soviet undergrad, mirrors Licenciatura
-    # Master-level (specific)
+    # Master (specific)
     "MA": MASTER, "MSc": MASTER, "MS": MASTER, "MFA": MASTER,
     "MDes": MASTER, "MArch": MASTER, "MEng": MASTER, "MPhil": MASTER,
     "MBA": MASTER, "MRes": MASTER, "MMus": MASTER, "LLM": MASTER,
-    # Master-level (specific, art/design long tail)
+    # Master (specific, art/design long tail)
     "MLitt": MASTER, "MPA": MASTER, "MVS": MASTER, "MDI": MASTER, "MID": MASTER,
     "Meisterschüler": MASTER,  # German art academy post-diploma qualification
-    # Master-level (generic)
+    # Master (generic)
     "Master": MASTER,
     # Doctorate
     "PhD": DOCTORATE, "DPhil": DOCTORATE, "EdD": DOCTORATE, "MD": DOCTORATE,
@@ -76,7 +88,22 @@ _CANONICAL_FAMILY: dict[str, str] = {
     "AFA": DIPLOMA,  # Associate of Fine Arts (2-year US pre-bachelor)
 }
 
-# Raw-variant (lowercased) -> canonical label. Punctuation and case are
+# Known combined-degree codes. These are real curriculum patterns observed in
+# art / design / architecture corpora, not arbitrary cartesian products.
+# To accept a new combined pattern: add it here, then re-run
+#   python -m scripts.sync_degree_labels
+# so the dictionary table picks up the new entry. The key MUST equal
+# "/".join(parts) using the canonical single-degree codes.
+_COMBINED_CATALOG: dict[str, list[str]] = {
+    "BA/BS": ["BA", "BS"],
+    "BA/MA": ["BA", "MA"],
+    "BA/MArch": ["BA", "MArch"],
+    "BA/MDes": ["BA", "MDes"],
+    "BDes/MArch": ["BDes", "MArch"],
+    "MDes/MFA": ["MDes", "MFA"],
+}
+
+# Raw-variant (lowercased) -> canonical code. Punctuation and case are
 # normalized before lookup; add new aliases here when a new spelling appears.
 _ALIASES: dict[str, str] = {
     # --- Bachelor specifics ---
@@ -171,6 +198,11 @@ _ALIASES: dict[str, str] = {
     "pgcert": "PGCert", "postgraduate certificate": "PGCert",
     "foundation": "Foundation", "foundation diploma": "Foundation",
     "afa": "AFA", "a.f.a.": "AFA", "associate of fine arts": "AFA",
+    # --- Combined-degree raw spellings ---
+    # Whole-string aliases for combined patterns whose raw text differs from
+    # the canonical "<part1>/<part2>" form (e.g. "BDesign/MArch" -> "BDes/MArch").
+    "bdesign/march": "BDes/MArch",
+    "bdesign / march": "BDes/MArch",
 }
 
 # Honours markers — stripped before canonical lookup, flag is set separately.
@@ -182,18 +214,8 @@ _HONOURS_RE = re.compile(
 # Separators that signal a joint/double degree: "/", "+", " & ", " and ".
 _SPLIT_RE = re.compile(r"\s*[\/+]\s*|\s+&\s+|\s+and\s+", re.IGNORECASE)
 
-# Values that should collapse to Other/None rather than being treated as a real degree.
+# Values that should collapse to None rather than being treated as a real degree.
 _SENTINEL_VALUES = {"other", "unknown", "n/a", "na", "null", "none", "-", "—"}
-
-
-def _empty_result() -> DegreeFields:
-    return {
-        "normalized_degree_type": None,
-        "degree_family": OTHER,
-        "honours_flag": False,
-        "combined_degree_flag": False,
-        "combined_with": None,
-    }
 
 
 def _collapse_whitespace(text: str) -> str:
@@ -201,7 +223,11 @@ def _collapse_whitespace(text: str) -> str:
 
 
 def _lookup_canonical(token: str) -> Optional[str]:
-    """Return the canonical label for a single degree token, or None."""
+    """Return the canonical code for a single degree token, or None.
+
+    Combined codes (containing "/") are not returned by this helper — they are
+    only valid when emitted via the combined-degree path in `normalize_degree`.
+    """
     stripped = _collapse_whitespace(token)
     if not stripped:
         return None
@@ -215,25 +241,17 @@ def _lookup_canonical(token: str) -> Optional[str]:
     return None
 
 
-def _infer_family_from_keywords(text: str) -> str:
-    """Last-resort family inference when no canonical match is found."""
-    low = text.lower()
-    if "phd" in low or "doctor" in low or "ph.d" in low:
-        return DOCTORATE
-    if "master" in low:
-        return MASTER
-    if "bachelor" in low or "licenci" in low:
-        return BACHELOR
-    if "diploma" in low or "certific" in low or "hnd" in low or "foundation" in low:
-        return DIPLOMA
-    return OTHER
+def _empty_result() -> DegreeFields:
+    return {"normalized_degree_type": None, "honours_flag": False}
 
 
 def normalize_degree(raw: Optional[str]) -> DegreeFields:
-    """Map a raw degree string to the five-field canonical scheme.
+    """Map a raw degree string to a controlled-vocabulary code + honours flag.
 
-    Unknown or sentinel inputs ("Other", null, empty) collapse to
-    `{normalized: None, family: Other, flags: False, combined_with: None}`.
+    Returns `{normalized_degree_type: None, honours_flag: False}` for sentinel
+    inputs ("Other", null, "Unknown"…) and for unknown combined-degree
+    patterns. Single-degree fallthroughs that we cannot map confidently also
+    return None — these surface as NULLs in the table for human review.
     """
     if raw is None:
         return _empty_result()
@@ -245,38 +263,59 @@ def normalize_degree(raw: Optional[str]) -> DegreeFields:
     honours = bool(_HONOURS_RE.search(text))
     cleaned = _collapse_whitespace(_HONOURS_RE.sub("", text))
 
-    # Combined / joint degree: split on / + & "and", require every part to be
-    # recognised before committing to the combined path — otherwise we'd over-
-    # match phrases like "Art and Design".
+    # Combined-degree path. Only emit a combined code when (a) every component
+    # is individually canonical AND (b) the resulting compound is registered
+    # in `_COMBINED_CATALOG`. New combinations must be added there explicitly.
     parts = [p for p in _SPLIT_RE.split(cleaned) if p.strip()]
     if len(parts) >= 2:
         canonical_parts = [_lookup_canonical(p) for p in parts]
         if all(canonical_parts):
-            top = max(canonical_parts, key=lambda c: _FAMILY_RANK[_CANONICAL_FAMILY[c]])
-            return {
-                "normalized_degree_type": "/".join(canonical_parts),
-                "degree_family": _CANONICAL_FAMILY[top],
-                "honours_flag": honours,
-                "combined_degree_flag": True,
-                "combined_with": canonical_parts,
-            }
+            compound = "/".join(canonical_parts)  # type: ignore[arg-type]
+            if compound in _COMBINED_CATALOG:
+                return {"normalized_degree_type": compound, "honours_flag": honours}
+            # Recognised parts but unregistered combination — fall through to
+            # whole-string lookup (covers patterns like "BDesign/MArch" that
+            # have a curated alias) and then to None for review.
+
+    # Whole-string lookup. This handles non-split aliases ("Absolvent/Meisterschüler*in"
+    # -> "Meisterschüler") and curated combined spellings ("BDesign/MArch" -> "BDes/MArch").
+    direct = _ALIASES.get(cleaned.lower())
+    if direct and (direct in _CANONICAL_FAMILY or direct in _COMBINED_CATALOG):
+        return {"normalized_degree_type": direct, "honours_flag": honours}
 
     canonical = _lookup_canonical(cleaned)
-    if canonical is not None:
-        return {
-            "normalized_degree_type": canonical,
-            "degree_family": _CANONICAL_FAMILY[canonical],
-            "honours_flag": honours,
-            "combined_degree_flag": False,
-            "combined_with": None,
-        }
+    if canonical is not None and canonical in _CANONICAL_FAMILY:
+        return {"normalized_degree_type": canonical, "honours_flag": honours}
 
-    # No canonical hit — keep normalized as None so the row is easy to surface
-    # for review, but still bucket it into a reasonable family.
-    return {
-        "normalized_degree_type": None,
-        "degree_family": _infer_family_from_keywords(cleaned),
-        "honours_flag": honours,
-        "combined_degree_flag": False,
-        "combined_with": None,
-    }
+    return {"normalized_degree_type": None, "honours_flag": honours}
+
+
+def _combined_family(parts: list[str]) -> str:
+    """Family for a combined code = highest-ranked family among its parts."""
+    return max(
+        (_CANONICAL_FAMILY[p] for p in parts),
+        key=lambda f: _FAMILY_RANK[f],
+    )
+
+
+def iter_label_catalog() -> Iterator[DegreeLabel]:
+    """Yield every controlled-vocabulary entry, single + combined.
+
+    Used by `scripts/sync_degree_labels.py` to keep the `degree_labels`
+    dictionary table aligned with this module. Single source of truth lives
+    here; the table is a derived index.
+    """
+    for code, family in _CANONICAL_FAMILY.items():
+        yield {
+            "code": code,
+            "family": family,
+            "is_combined": False,
+            "parts": None,
+        }
+    for code, parts in _COMBINED_CATALOG.items():
+        yield {
+            "code": code,
+            "family": _combined_family(parts),
+            "is_combined": True,
+            "parts": list(parts),
+        }
