@@ -42,7 +42,7 @@ def main() -> int:
 
     existing = (
         client.table(TABLE)
-        .select("code,family,is_combined,parts")
+        .select("code,display_name,display_name_zh,family,is_combined,parts")
         .execute()
         .data
         or []
@@ -54,6 +54,8 @@ def main() -> int:
         current = existing_by_code.get(entry["code"])
         payload = {
             "code": entry["code"],
+            "display_name": entry["display_name"],
+            "display_name_zh": entry["display_name_zh"],
             "family": entry["family"],
             "is_combined": entry["is_combined"],
             "parts": entry["parts"],
@@ -64,7 +66,9 @@ def main() -> int:
             continue
         # Skip no-op updates so we don't bump updated_at unnecessarily.
         if (
-            current.get("family") == payload["family"]
+            current.get("display_name") == payload["display_name"]
+            and current.get("display_name_zh") == payload["display_name_zh"]
+            and current.get("family") == payload["family"]
             and bool(current.get("is_combined")) == payload["is_combined"]
             and (current.get("parts") or None) == payload["parts"]
         ):

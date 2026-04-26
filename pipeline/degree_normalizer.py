@@ -41,6 +41,8 @@ class DegreeFields(TypedDict):
 
 class DegreeLabel(TypedDict):
     code: str
+    display_name: str           # English full form for UI; defaults to code
+    display_name_zh: Optional[str]
     family: str
     is_combined: bool
     parts: Optional[list[str]]
@@ -86,6 +88,77 @@ _CANONICAL_FAMILY: dict[str, str] = {
     "Certificate": DIPLOMA, "PGDip": DIPLOMA, "PGCert": DIPLOMA,
     "Foundation": DIPLOMA,
     "AFA": DIPLOMA,  # Associate of Fine Arts (2-year US pre-bachelor)
+}
+
+# Display labels for the controlled vocabulary. Maintained here so the
+# dictionary table stays in sync via scripts/sync_degree_labels.py — UI text
+# changes ("博士" -> "博士学位") only need to be made in this dict.
+# Codes not listed here fall back to (code, None) so the column is never blank.
+_DISPLAY_NAMES: dict[str, tuple[str, Optional[str]]] = {
+    # --- Bachelor (specific) ---
+    "BA":         ("Bachelor of Arts",                  "文学学士"),
+    "BSc":        ("Bachelor of Science",               "理学学士"),
+    "BS":         ("Bachelor of Science",               "理学学士"),
+    "BFA":        ("Bachelor of Fine Arts",             "美术学士"),
+    "BDes":       ("Bachelor of Design",                "设计学士"),
+    "BEng":       ("Bachelor of Engineering",           "工学学士"),
+    "BArch":      ("Bachelor of Architecture",          "建筑学学士"),
+    "BMus":       ("Bachelor of Music",                 "音乐学士"),
+    "BBA":        ("Bachelor of Business Administration", "工商管理学士"),
+    "LLB":        ("Bachelor of Laws",                  "法学学士"),
+    "BEd":        ("Bachelor of Education",             "教育学学士"),
+    "BEnvD":      ("Bachelor of Environmental Design",  "环境设计学士"),
+    "BAS":        ("Bachelor of Applied Science",       "应用科学学士"),
+    "BAFT":       ("Bachelor of Arts (Fashion & Textiles)", "艺术学士（时装与纺织）"),
+    "BVA":        ("Bachelor of Visual Arts",           "视觉艺术学士"),
+    "BDI":        ("Bachelor of Design Innovation",     "设计创新学士"),
+    "BID":        ("Bachelor of Interior Design",       "室内设计学士"),
+    "Bachelor":   ("Bachelor (Generic)",                "学士"),
+    "Licenciatura": ("Licenciatura",                    "拉美/欧陆本科学位（Licenciatura）"),
+    "Specialist": ("Specialist Degree",                 "专家学位"),
+    # --- Master (specific) ---
+    "MA":         ("Master of Arts",                    "文学硕士"),
+    "MSc":        ("Master of Science",                 "理学硕士"),
+    "MS":         ("Master of Science",                 "理学硕士"),
+    "MFA":        ("Master of Fine Arts",               "美术硕士"),
+    "MDes":       ("Master of Design",                  "设计硕士"),
+    "MArch":      ("Master of Architecture",            "建筑学硕士"),
+    "MEng":       ("Master of Engineering",             "工程硕士"),
+    "MPhil":      ("Master of Philosophy",              "哲学硕士"),
+    "MBA":        ("Master of Business Administration", "工商管理硕士"),
+    "MRes":       ("Master of Research",                "研究硕士"),
+    "MMus":       ("Master of Music",                   "音乐硕士"),
+    "LLM":        ("Master of Laws",                    "法学硕士"),
+    "MLitt":      ("Master of Letters",                 "文学硕士（牛津/圣安体系）"),
+    "MPA":        ("Master of Public Art / Administration", "公共艺术/管理硕士"),
+    "MVS":        ("Master of Visual Studies",          "视觉研究硕士"),
+    "MDI":        ("Master of Design Innovation",       "设计创新硕士"),
+    "MID":        ("Master of Interior Design",         "室内设计硕士"),
+    "Meisterschüler": ("Meisterschüler",                "大师班毕业生（德国艺术学院）"),
+    "Master":     ("Master (Generic)",                  "硕士"),
+    # --- Doctorate ---
+    "PhD":        ("Doctor of Philosophy",              "博士"),
+    "DPhil":      ("Doctor of Philosophy (Oxford)",     "博士（牛津体系）"),
+    "EdD":        ("Doctor of Education",               "教育博士"),
+    "MD":         ("Doctor of Medicine",                "医学博士"),
+    "DFA":        ("Doctor of Fine Arts",               "美术博士"),
+    "Doctorate":  ("Doctorate (Generic)",               "博士学位"),
+    # --- Diploma / certificate tier ---
+    "Diploma":        ("Diploma",                       "文凭"),
+    "Higher Diploma": ("Higher Diploma",                "高级文凭"),
+    "HND":            ("Higher National Diploma",       "高级国家文凭"),
+    "Certificate":    ("Certificate",                   "证书"),
+    "PGDip":          ("Postgraduate Diploma",          "研究生文凭"),
+    "PGCert":         ("Postgraduate Certificate",      "研究生证书"),
+    "Foundation":     ("Foundation Diploma",            "预科文凭"),
+    "AFA":            ("Associate of Fine Arts",        "美术副学士"),
+    # --- Combined degrees ---
+    "BA/BS":      ("BA + BS Double Major",              "文学+理学双学位"),
+    "BA/MA":      ("BA + MA Combined Degree",           "本硕连读（BA+MA）"),
+    "BA/MArch":   ("BA + Master of Architecture",       "本硕连读（BA+建筑硕士）"),
+    "BA/MDes":    ("BA + Master of Design",             "本硕连读（BA+设计硕士）"),
+    "BDes/MArch": ("BDes + MArch Combined",             "本硕连读（设计学士+建筑硕士）"),
+    "MDes/MFA":   ("MDes + MFA Double Master",          "设计硕士+美术硕士（双硕士）"),
 }
 
 # Known combined-degree codes. These are real curriculum patterns observed in
@@ -298,6 +371,12 @@ def _combined_family(parts: list[str]) -> str:
     )
 
 
+def _names_for(code: str) -> tuple[str, Optional[str]]:
+    """Return (display_name, display_name_zh) for a code, falling back to code."""
+    en, zh = _DISPLAY_NAMES.get(code, (code, None))
+    return en, zh
+
+
 def iter_label_catalog() -> Iterator[DegreeLabel]:
     """Yield every controlled-vocabulary entry, single + combined.
 
@@ -306,15 +385,21 @@ def iter_label_catalog() -> Iterator[DegreeLabel]:
     here; the table is a derived index.
     """
     for code, family in _CANONICAL_FAMILY.items():
+        en, zh = _names_for(code)
         yield {
             "code": code,
+            "display_name": en,
+            "display_name_zh": zh,
             "family": family,
             "is_combined": False,
             "parts": None,
         }
     for code, parts in _COMBINED_CATALOG.items():
+        en, zh = _names_for(code)
         yield {
             "code": code,
+            "display_name": en,
+            "display_name_zh": zh,
             "family": _combined_family(parts),
             "is_combined": True,
             "parts": list(parts),
