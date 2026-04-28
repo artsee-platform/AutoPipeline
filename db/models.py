@@ -6,7 +6,9 @@ class School(TypedDict, total=False):
     id: Optional[int]
     name_zh: Optional[str]
     name_en: str                        # natural key — must be present
-    country: Optional[str]
+    raw_country: Optional[str]          # legacy mixed label (Chinese + buckets); was `country` pre-P2
+    country_code: Optional[str]         # ISO 3166-1 alpha-2, FK → countries
+    region_tag: Optional[str]           # FK → region_tags
     city: Optional[str]
     school_type: Optional[str]
     qs_art_humanities_rank: Optional[int]

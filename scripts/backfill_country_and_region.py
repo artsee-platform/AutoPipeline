@@ -1,16 +1,17 @@
 """Backfill `schools.country_code` and `schools.region_tag` from the legacy
-`schools.country` text column.
+geography text column (`country` before P2, `raw_country` after
+`db/migrate_p2_schools_raw_country_rename.sql`).
 
 Run after `db/migrate_p1_country_region.sql` is applied. Idempotent — rows
 that already match what the resolver would produce are skipped.
 
 For every row:
-  * If `country` is one of the 4 US-internal flagship buckets (e.g. "加州旗舰"),
+  * If the legacy label is one of the 4 US-internal flagship buckets (e.g. "加州旗舰"),
     sets country_code='US' and region_tag='us_..._flagship'.
-  * If `country` is one of the 5 multi-country buckets (e.g. "北欧",
+  * If the legacy label is one of the 5 multi-country buckets (e.g. "北欧",
     "其他亚洲国家"), sets region_tag only and leaves country_code=NULL for
     manual entry.
-  * Otherwise treats `country` as a real country label and maps it to an
+  * Otherwise treats the legacy label as a real country label and maps it to an
     ISO 3166-1 alpha-2 code.
 
 At the end the script prints every row whose country_code is still NULL so
@@ -68,6 +69,26 @@ def _ensure_country_columns(client) -> bool:
     return True
 
 
+def _legacy_geography_column(client) -> str | None:
+    """`raw_country` after P2 rename; `country` on older schemas."""
+    for col in ("raw_country", "country"):
+        try:
+            client.table(TABLE).select(f"id,{col}").limit(1).execute()
+            return col
+        except APIError as exc:
+            msg = getattr(exc, "message", None) or str(exc)
+            if "does not exist" in msg:
+                continue
+            raise
+    print(
+        "\nError: neither `schools.raw_country` nor `schools.country` exists.\n"
+        "If P1 is applied, add/rename the legacy text column (see migrate_p2) "
+        "or restore the column that holds the Chinese / bucket labels.\n"
+    )
+    log.error("no legacy geography text column on schools")
+    return None
+
+
 def _unchanged(current: dict, computed: dict) -> bool:
     return (
         current.get("country_code") == computed["country_code"]
@@ -81,6 +102,10 @@ def main() -> int:
     if not _ensure_country_columns(client):
         return 2
 
+    label_col = _legacy_geography_column(client)
+    if label_col is None:
+        return 2
+
     start = 0
     seen = 0
     updated = 0
@@ -90,7 +115,9 @@ def main() -> int:
     while True:
         resp = (
             client.table(TABLE)
-            .select("id,name_en,name_zh,country,country_code,region_tag")
+            .select(
+                f"id,name_en,name_zh,{label_col},country_code,region_tag",
+            )
             .order("id")
             .range(start, start + PAGE - 1)
             .execute()
@@ -101,7 +128,7 @@ def main() -> int:
 
         for row in rows:
             seen += 1
-            raw = row.get("country")
+            raw = row.get(label_col)
             computed = resolve_country(raw)
 
             if computed["country_code"] is None and computed["region_tag"] is None and raw:
@@ -109,7 +136,7 @@ def main() -> int:
                     "id": row["id"],
                     "name_en": row.get("name_en"),
                     "name_zh": row.get("name_zh"),
-                    "country": raw,
+                    "legacy_label": raw,
                 })
 
             if computed["country_code"] is None and computed["region_tag"] is not None:
@@ -117,7 +144,7 @@ def main() -> int:
                     "id": row["id"],
                     "name_en": row.get("name_en"),
                     "name_zh": row.get("name_zh"),
-                    "country": raw,
+                    "legacy_label": raw,
                     "region_tag": computed["region_tag"],
                 })
 
@@ -137,15 +164,15 @@ def main() -> int:
 
     if unrecognised:
         log.warning(
-            "%d rows have a `country` value that the normalizer could not map "
+            "%d rows have a legacy geography label that the normalizer could not map "
             "to any ISO code or region_tag. Add the missing alias to "
             "pipeline/country_normalizer.py and re-run.",
             len(unrecognised),
         )
         for r in unrecognised:
             log.warning(
-                "  unrecognised: id=%s  country=%r  name_en=%s  name_zh=%s",
-                r["id"], r["country"], r["name_en"], r["name_zh"],
+                "  unrecognised: id=%s  legacy_label=%r  name_en=%s  name_zh=%s",
+                r["id"], r["legacy_label"], r["name_en"], r["name_zh"],
             )
 
     if needs_manual:
@@ -156,8 +183,8 @@ def main() -> int:
         )
         for r in needs_manual:
             log.info(
-                "  manual: id=%s  region_tag=%s  raw_country=%r  name_en=%s  name_zh=%s",
-                r["id"], r["region_tag"], r["country"], r["name_en"], r["name_zh"],
+                "  manual: id=%s  region_tag=%s  legacy_label=%r  name_en=%s  name_zh=%s",
+                r["id"], r["region_tag"], r["legacy_label"], r["name_en"], r["name_zh"],
             )
         print("\n-- ============================================================")
         print("-- Manually resolve the rows below by replacing 'XX' with the")
@@ -167,7 +194,7 @@ def main() -> int:
             label = r["name_en"] or r["name_zh"] or "(no name)"
             print(
                 f"UPDATE public.schools SET country_code = 'XX' "
-                f"WHERE id = '{r['id']}';  -- {label} | bucket={r['region_tag']} | raw={r['country']!r}"
+                f"WHERE id = '{r['id']}';  -- {label} | bucket={r['region_tag']} | raw={r['legacy_label']!r}"
             )
 
     return 0
