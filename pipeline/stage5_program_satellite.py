@@ -22,6 +22,7 @@ import anthropic
 from config.settings import Settings
 from db.supabase_client import TABLE as SCHOOLS_TABLE, get_client
 from pipeline import evidence
+from pipeline.evaluation_difficulty import normalize_application_difficulty
 from utils.logger import get_logger
 from utils.retry import retry
 
@@ -81,7 +82,8 @@ Return a single JSON object with exactly these keys:
   portfolio_requirements (string|null), priority_deadline (string|null), reference_count (integer|null),
   regular_deadline (string|null), toefl_ibt (integer|null)
 - evaluation: object with keys: acceptance_rate (number|null, 0-1 or percentage as 0.xx if evidence),
-  application_difficulty_score (string|null, max 20 chars), competition_level (string|null, max 50 chars),
+  application_difficulty_score (integer 1-5|null only — 1 easiest, 5 hardest; use null when evidence is insufficient),
+  competition_level (string|null, max 50 chars),
   data_source (string|null, max 100 chars), evidence_note (string|null), source_url (string|null)"""
 
     if not fill_art_categories:
@@ -303,10 +305,18 @@ def _fetch_programs_page(client, start: int, page_size: int) -> list[dict]:
     return resp.data or []
 
 
+def _currency_code_iso4217(val: Any) -> str:
+    raw = _nullable_str(val) or "GBP"
+    code = raw.strip().upper()
+    if len(code) == 3 and code.isalpha():
+        return code
+    return "GBP"
+
+
 def _insert_fees(client, program_id: str, fees: dict) -> None:
     row = {
         "program_id": program_id,
-        "currency_code": _nullable_str(fees.get("currency_code")) or "GBP",
+        "currency_code": _currency_code_iso4217(fees.get("currency_code")),
         "domestic_tuition_fee": _nullable_float(fees.get("domestic_tuition_fee")),
         "international_tuition_fee": _nullable_float(fees.get("international_tuition_fee")),
         "additional_fees_note": _nullable_str(fees.get("additional_fees_note")),
@@ -338,10 +348,9 @@ def _insert_evaluation(client, program_id: str, ev: dict) -> None:
     row = {
         "program_id": program_id,
         "acceptance_rate": _nullable_float(ev.get("acceptance_rate")),
-        "application_difficulty_score": (_nullable_str(ev.get("application_difficulty_score")) or "")[
-            :20
-        ]
-        or None,
+        "application_difficulty_score": normalize_application_difficulty(
+            ev.get("application_difficulty_score")
+        ),
         "competition_level": (_nullable_str(ev.get("competition_level")) or "")[:50] or None,
         "data_source": (_nullable_str(ev.get("data_source")) or "")[:100] or None,
         "evidence_note": _nullable_str(ev.get("evidence_note")),
