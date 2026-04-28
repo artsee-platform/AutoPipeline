@@ -32,7 +32,10 @@ def load_and_clean_xlsx() -> list[dict]:
         school = {
             "name_en": name_en,
             "name_zh": _clean_str(row.get("name_zh")),
-            "country": _clean_str(row.get("country_or_area")),
+            # Legacy mixed label (Chinese country + product buckets). Canonical
+            # columns are country_code + region_tag (see db/migrate_p1_country_region.sql).
+            # Column renamed from `country` → `raw_country` in migrate_p2.
+            "raw_country": _clean_str(row.get("country_or_area")),
             "official_website": _clean_str(row.get("official_website")),
             "status": "pending",
         }
@@ -67,7 +70,7 @@ def run(settings: Settings) -> None:
 
         if school["name_en"] in existing:
             # Update seed fields only — do NOT touch status or any enrichment data
-            seed_fields = {k: school[k] for k in ("name_zh", "country", "official_website")}
+            seed_fields = {k: school[k] for k in ("name_zh", "raw_country", "official_website")}
             client.table(TABLE).update(seed_fields).eq("name_en", school["name_en"]).execute()
             updated += 1
         else:

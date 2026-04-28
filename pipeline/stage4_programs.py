@@ -157,7 +157,9 @@ def _claude_programs(
     prompt = USER_TEMPLATE.format(
         name_en=school.get("name_en") or "",
         name_zh=school.get("name_zh") or "",
-        country=school.get("country") or "",
+        country=school.get("raw_country")
+        or school.get("country")
+        or "",
         website=school.get("official_website") or "unknown",
         need=need,
         evidence=evidence,

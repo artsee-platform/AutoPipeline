@@ -47,7 +47,12 @@ def run(settings: Settings, batch_size: int) -> None:
             # Preserve known fields from xlsx that Claude might overwrite
             merged["name_en"] = web_data.get("name_en") or name_en
             merged["name_zh"] = school.get("name_zh") or merged.get("name_zh")
-            merged["country"] = school.get("country") or merged.get("country")
+            merged["raw_country"] = (
+                school.get("raw_country")
+                or school.get("country")
+                or merged.get("raw_country")
+                or merged.get("country")
+            )
             merged["official_website"] = school.get("official_website") or merged.get("official_website")
 
             upsert_school(supabase, merged)
