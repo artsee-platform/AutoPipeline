@@ -281,7 +281,7 @@ def _fetch_schools_map(client, school_ids: list[str]) -> dict[str, dict]:
         return {}
     resp = (
         client.table(SCHOOLS_TABLE)
-        .select("id,name_en,name_zh,official_website,country")
+        .select("id,name_en,name_zh,official_website,raw_country")
         .in_("id", list(dict.fromkeys(school_ids)))
         .execute()
     )
@@ -399,12 +399,12 @@ def run(
                 "name_en": prog.get("school_name_en"),
                 "name_zh": prog.get("school_name_zh"),
                 "official_website": None,
-                "country": None,
+                "raw_country": None,
             }
             name_en = school.get("name_en") or prog.get("school_name_en") or ""
             name_zh = school.get("name_zh") or prog.get("school_name_zh") or ""
             website = (school.get("official_website") or "").strip()
-            country = school.get("country") or ""
+            country = (school.get("raw_country") or "").strip()
 
             log.info(
                 "→ %s / %s",

@@ -180,7 +180,7 @@ def build_evidence_for_school_programs(settings: Settings, school: dict) -> str:
     name_en = school.get("name_en") or ""
     name_zh = school.get("name_zh") or ""
     website = (school.get("official_website") or "").strip()
-    country = school.get("country") or ""
+    country = school.get("raw_country") or school.get("country") or ""
     domain = domain_from_url(website)
 
     queries = [
@@ -209,7 +209,7 @@ def build_evidence_for_program_detail(
     name_en = school.get("name_en") or ""
     name_zh = school.get("name_zh") or ""
     website = (school.get("official_website") or "").strip()
-    country = school.get("country") or ""
+    country = school.get("raw_country") or school.get("country") or ""
     domain = domain_from_url(website)
     pname = (program.get("program_name") or "").strip()
     deg = (
