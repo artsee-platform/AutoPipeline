@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from urllib.parse import urlparse
 
@@ -30,6 +31,83 @@ FETCH_HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+
+# HTTP status codes where a real browser sometimes succeeds (bot/WAF blocks).
+_PLAYWRIGHT_FALLBACK_STATUSES = frozenset({401, 403, 429, 503})
+
+_PLAYWRIGHT_GOTO_MS = 55_000
+
+
+def _evidence_playwright_enabled() -> bool:
+    return os.getenv("EVIDENCE_PLAYWRIGHT", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+class _LazyPlaywright:
+    """One Chromium instance per evidence batch; pages are opened/closed per URL."""
+
+    def __init__(self) -> None:
+        self._playwright = None
+        self._browser = None
+        self._import_error_logged = False
+
+    def fetch_html(self, url: str) -> str | None:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            if not self._import_error_logged:
+                log.warning(
+                    "  Playwright import failed; install browsers with: "
+                    "pip install playwright && playwright install chromium"
+                )
+                self._import_error_logged = True
+            return None
+        try:
+            if self._browser is None:
+                log.info("  launching Playwright Chromium (WAF / blocked fetch fallback)")
+                self._playwright = sync_playwright().start()
+                self._browser = self._playwright.chromium.launch(headless=True)
+            page = self._browser.new_page()
+            try:
+                resp = page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=_PLAYWRIGHT_GOTO_MS,
+                )
+                if resp is not None:
+                    ct = (resp.headers.get("content-type") or "").lower()
+                    if "pdf" in ct or resp.status >= 400:
+                        if resp.status >= 400:
+                            log.warning(
+                                f"  playwright HTTP {resp.status} for {url!r}"
+                            )
+                        return None
+                # Brief pause for late client-rendered body (some bot gates).
+                time.sleep(0.8)
+                return page.content()
+            finally:
+                page.close()
+        except Exception as exc:
+            log.warning(f"  playwright fetch failed {url!r}: {exc}")
+            return None
+
+    def close(self) -> None:
+        if self._browser is not None:
+            try:
+                self._browser.close()
+            except Exception:
+                pass
+            self._browser = None
+        if self._playwright is not None:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
 
 
 def domain_from_url(url: str) -> str:
@@ -90,15 +168,46 @@ def extract_visible_text(html: str, max_chars: int) -> str:
     return out
 
 
-def fetch_official_page_text(url: str, max_chars: int) -> str | None:
+def fetch_official_page_text(
+    url: str,
+    max_chars: int,
+    *,
+    lazy_pw: _LazyPlaywright | None = None,
+) -> str | None:
     if not url or not url.startswith(("http://", "https://")):
         return None
+
+    def _from_html(html: str, source: str) -> str | None:
+        lower = html[:2000].lower()
+        if "<html" not in lower and "<!doctype html" not in html[:200].lower():
+            log.warning(f"  skip likely non-html {url!r} ({source})")
+            return None
+        try:
+            return extract_visible_text(html, max_chars)
+        except Exception as exc:
+            log.warning(f"  parse failed {url!r}: {exc}")
+            return None
+
     try:
         resp = requests.get(url, headers=FETCH_HEADERS, timeout=25, allow_redirects=True)
         resp.raise_for_status()
-    except Exception as exc:
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else None
+        if (
+            lazy_pw is not None
+            and code in _PLAYWRIGHT_FALLBACK_STATUSES
+        ):
+            log.info(f"  HTTP {code} for {url!r}; retrying with Playwright")
+            html_pw = lazy_pw.fetch_html(url)
+            if html_pw:
+                return _from_html(html_pw, "playwright")
+            return None
         log.warning(f"  fetch failed {url!r}: {exc}")
         return None
+    except requests.RequestException as exc:
+        log.warning(f"  fetch failed {url!r}: {exc}")
+        return None
+
     ctype = (resp.headers.get("Content-Type") or "").lower()
     if "pdf" in ctype or "msword" in ctype or "wordprocessingml" in ctype:
         log.warning(f"  skip non-html {url!r} ({ctype})")
@@ -107,11 +216,7 @@ def fetch_official_page_text(url: str, max_chars: int) -> str | None:
         if "<html" not in resp.text[:2000].lower() and "<!doctype html" not in resp.text[:200].lower():
             log.warning(f"  skip likely non-html {url!r} ({ctype})")
             return None
-    try:
-        return extract_visible_text(resp.text, max_chars)
-    except Exception as exc:
-        log.warning(f"  parse failed {url!r}: {exc}")
-        return None
+    return _from_html(resp.text, ctype or "http")
 
 
 def trim_evidence_total(text: str, soft_max: int) -> str:
@@ -162,15 +267,22 @@ def _gather_blocks_from_queries(
             seen_deep.add(u)
     deep_urls = deep_urls[:MAX_DEEP_FETCH_PAGES]
 
-    for i, page_url in enumerate(deep_urls):
-        if i > 0:
-            time.sleep(0.35)
-        extracted = fetch_official_page_text(page_url, PAGE_EXTRACT_MAX)
-        if not extracted:
-            continue
-        blocks.append(
-            f"Source: official-site page extract\nURL: {page_url}\nText:\n{extracted}"
-        )
+    lazy_pw = _LazyPlaywright() if _evidence_playwright_enabled() else None
+    try:
+        for i, page_url in enumerate(deep_urls):
+            if i > 0:
+                time.sleep(0.35)
+            extracted = fetch_official_page_text(
+                page_url, PAGE_EXTRACT_MAX, lazy_pw=lazy_pw
+            )
+            if not extracted:
+                continue
+            blocks.append(
+                f"Source: official-site page extract\nURL: {page_url}\nText:\n{extracted}"
+            )
+    finally:
+        if lazy_pw is not None:
+            lazy_pw.close()
 
     return blocks
 

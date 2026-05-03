@@ -1,22 +1,23 @@
 """Stage 2 — QS Rankings lookup via multi-stage name matching + LLM safety net."""
-import json
 import time
 from pathlib import Path
 import os
-import requests
 import anthropic
 import pandas as pd
 from config.settings import Settings
 from db.supabase_client import get_client, fetch_by_status, upsert_school
 from utils.logger import get_logger
 from pipeline.qs_matcher import QSIndex, MatchResult
+from pipeline.qs_global_rank import (
+    load_overall_index,
+    resolve_qs_overall_rank_with_llm,
+    format_qs_overall_rank_value,
+)
 
 log = get_logger("stage2")
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 SUBJECT_EXCEL = _DATA_DIR / "qs_data_subject.xlsx"
-OVERALL_CSV   = _DATA_DIR / "qs_data_metrics.csv"
-TAVILY_URL    = "https://api.tavily.com/search"
 
 # Supabase column → Excel sheet name (art-domain subjects only)
 ART_SUBJECTS = {
@@ -25,34 +26,6 @@ ART_SUBJECTS = {
     "qs_art_design_rank":                     "Art & Design",
     "qs_history_of_art_rank":                 "History of Art",
 }
-
-_LLM_SYSTEM = """You are a data extraction assistant. Extract QS World University Rankings 2026 data from web search snippets.
-Return ONLY a valid JSON object — no markdown, no explanation.
-Use null for any rank not explicitly stated in the evidence.
-Do NOT infer or guess ranks. Only extract numbers you can see in the evidence.
-For range ranks like "51-100", return the lower bound integer (51)."""
-
-_LLM_USER = """Find QS 2026 rankings for this school from the web evidence below.
-
-School: {name_en}
-Country: {country}
-
-Web evidence:
-{evidence}
-
-Return ONLY this JSON (all values integer or null):
-{{
-  "qs_overall_rank": null,
-  "qs_art_humanities_rank": null,
-  "qs_architecture_built_environment_rank": null,
-  "qs_art_design_rank": null,
-  "qs_history_of_art_rank": null
-}}
-
-Rules:
-- Only fill a field if the evidence explicitly states a QS 2026 rank number for that category.
-- If the school is a department of a larger university, you may use the parent university's QS rank for qs_overall_rank only — but only if the evidence clearly connects them.
-- Return null for any field without clear evidence."""
 
 
 def _load_subject_indices() -> dict[str, QSIndex]:
@@ -75,17 +48,6 @@ def _load_subject_indices() -> dict[str, QSIndex]:
     return indices
 
 
-def _load_overall_index() -> QSIndex | None:
-    """Build QSIndex for overall QS 2026 world rankings."""
-    if not os.path.exists(OVERALL_CSV):
-        log.warning(f"Overall CSV not found: {OVERALL_CSV}")
-        return None
-    df = pd.read_csv(OVERALL_CSV)
-    log.info(f"Indexed {len(df)} rows from {OVERALL_CSV}")
-    return QSIndex(df, inst_col="Institution Name", rank_col="2026 Rank",
-                   country_col="Country/Territory")
-
-
 def _assign_tier(subject_ranks: dict, qs_overall: int | None) -> int:
     """Tier 1: best art rank ≤ 50 or overall ≤ 100.
     Tier 2: best art rank ≤ 200 or overall ≤ 300. Else Tier 3."""
@@ -104,116 +66,6 @@ def _fmt_result(r: MatchResult | None) -> str:
     if r.band == "auto_match":
         return str(r.rank)
     return f"~{r.band}({r.confidence:.2f})"
-
-
-# ---------------------------------------------------------------------------
-# LLM safety net
-# ---------------------------------------------------------------------------
-
-def _tavily_search(api_key: str, query: str, max_results: int = 5) -> list[dict]:
-    try:
-        resp = requests.post(
-            TAVILY_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"query": query, "search_depth": "basic", "max_results": max_results,
-                  "include_raw_content": False, "include_answer": False},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json().get("results") or []
-    except Exception as e:
-        log.warning(f"  [LLM] Tavily search failed: {e}")
-        return []
-
-
-def _build_qs_evidence(api_key: str, name_en: str) -> str:
-    """Two targeted searches: overall rank + art/design subject ranks."""
-    queries = [
-        f'"{name_en}" QS World University Rankings 2026',
-        f'"{name_en}" QS subject rankings 2026 art design architecture humanities',
-    ]
-    blocks: list[str] = []
-    seen: set[str] = set()
-    for query in queries:
-        for r in _tavily_search(api_key, query, max_results=4):
-            url = r.get("url") or ""
-            if url in seen:
-                continue
-            seen.add(url)
-            title   = (r.get("title") or "").strip()
-            content = (r.get("content") or "").strip()[:600]
-            blocks.append(f"[{title}]\n{url}\n{content}")
-            if len(blocks) >= 8:
-                break
-        if len(blocks) >= 8:
-            break
-    return "\n\n---\n\n".join(blocks) if blocks else ""
-
-
-def _parse_llm_ranks(text: str, name_en: str) -> dict[str, int | None]:
-    """Extract the JSON dict from Claude's response."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-    start, end = text.find("{"), text.rfind("}") + 1
-    if start == -1 or end == 0:
-        log.warning(f"  [LLM] no JSON in response for {name_en!r}")
-        return {}
-    try:
-        raw = json.loads(text[start:end])
-    except json.JSONDecodeError as e:
-        log.warning(f"  [LLM] JSON parse error for {name_en!r}: {e}")
-        return {}
-
-    result: dict[str, int | None] = {}
-    for field in ["qs_overall_rank", "qs_art_humanities_rank",
-                  "qs_architecture_built_environment_rank",
-                  "qs_art_design_rank", "qs_history_of_art_rank"]:
-        val = raw.get(field)
-        if val is None:
-            result[field] = None
-        else:
-            try:
-                result[field] = int(val)
-            except (TypeError, ValueError):
-                result[field] = None
-    return result
-
-
-def _llm_rank_lookup(
-    name_en: str,
-    country: str,
-    settings: Settings,
-    claude: anthropic.Anthropic,
-) -> dict[str, int | None]:
-    """Use Tavily + Claude Haiku to find QS 2026 ranks when the matcher fails."""
-    evidence = _build_qs_evidence(settings.tavily_api_key, name_en)
-    if not evidence:
-        log.info(f"  [LLM] no web evidence found for {name_en!r}")
-        return {}
-
-    prompt = _LLM_USER.format(name_en=name_en, country=country or "unknown", evidence=evidence)
-    try:
-        resp = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=256,
-            system=_LLM_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception as e:
-        log.warning(f"  [LLM] Claude call failed for {name_en!r}: {e}")
-        return {}
-
-    text = "".join(b.text for b in resp.content if b.type == "text")
-    ranks = _parse_llm_ranks(text, name_en)
-
-    found = {k: v for k, v in ranks.items() if v is not None}
-    if found:
-        log.info(f"  [LLM] found for {name_en!r}: {found}")
-    else:
-        log.info(f"  [LLM] nothing found for {name_en!r}")
-    return ranks
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +107,7 @@ def run(settings: Settings, batch_size: int) -> None:
     claude   = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     subject_indices = _load_subject_indices()
-    overall_index   = _load_overall_index()
+    overall_index   = load_overall_index()
 
     schools = fetch_by_status(supabase, "enriched", batch_size)
     log.info(f"Looking up QS rankings for {len(schools)} schools")
@@ -265,7 +117,7 @@ def run(settings: Settings, batch_size: int) -> None:
 
     for school in schools:
         name_en = school["name_en"]
-        country = school.get("country", "") or ""
+        country = school.get("raw_country") or school.get("country") or ""
 
         # --- Pass 1: local file matcher ---
         subject_ranks: dict[str, int | None] = {}
@@ -276,20 +128,14 @@ def run(settings: Settings, batch_size: int) -> None:
             subject_results[db_col] = result
 
         overall_result: MatchResult | None = None
-        qs_overall: int | None = None
         if overall_index is not None:
             overall_result = overall_index.match(name_en, country)
-            qs_overall = overall_result.rank
 
-        # --- Pass 2: LLM safety net for any school missing qs_overall_rank ---
-        llm_ranks: dict[str, int | None] = {}
-        if qs_overall is None:
-            llm_ranks = _llm_rank_lookup(name_en, country, settings, claude)
-            time.sleep(0.5)   # respect rate limits
-
-            # Merge: LLM fills only fields that are still NULL from matcher
-            if llm_ranks.get("qs_overall_rank") is not None:
-                qs_overall = llm_ranks["qs_overall_rank"]
+        qs_overall, llm_ranks, used_llm = resolve_qs_overall_rank_with_llm(
+            name_en, country, overall_index, settings, claude
+        )
+        if used_llm:
+            time.sleep(0.5)  # respect rate limits
             for field in subject_ranks:
                 if subject_ranks[field] is None and llm_ranks.get(field) is not None:
                     subject_ranks[field] = llm_ranks[field]
@@ -299,7 +145,7 @@ def run(settings: Settings, batch_size: int) -> None:
         upsert_school(supabase, {
             **school,
             **subject_ranks,
-            "qs_overall_rank": qs_overall,
+            "qs_overall_rank": format_qs_overall_rank_value(qs_overall),
             "school_tier": tier,
             "status": "qs_done",
         })
@@ -311,7 +157,7 @@ def run(settings: Settings, batch_size: int) -> None:
             f"arch={subject_ranks.get('qs_architecture_built_environment_rank')}, "
             f"art_design={subject_ranks.get('qs_art_design_rank')}, "
             f"hist_art={subject_ranks.get('qs_history_of_art_rank')}, "
-            f"overall={qs_overall}, tier={tier}"
+            f"overall={qs_overall}, qs_overall_rank={format_qs_overall_rank_value(qs_overall)}, tier={tier}"
         )
 
         # --- Collect for end-of-run reports ---

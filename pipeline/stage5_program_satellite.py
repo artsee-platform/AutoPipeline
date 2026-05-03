@@ -83,8 +83,9 @@ Return a single JSON object with exactly these keys:
   regular_deadline (string|null), toefl_ibt (integer|null)
 - evaluation: object with keys: acceptance_rate (number|null, 0-1 or percentage as 0.xx if evidence),
   application_difficulty_score (integer 1-5|null only — 1 easiest, 5 hardest; use null when evidence is insufficient),
-  competition_level (string|null, max 50 chars),
-  data_source (string|null, max 100 chars), evidence_note (string|null), source_url (string|null)"""
+  competition_level (string|null) — 2–3 complete sentences in English summarising how competitive admissions appear from evidence (pool size, selectivity signals, portfolio bar, etc.). Do not truncate mid-sentence; use null if evidence is too thin to say anything meaningful,
+  data_source (string|null) — short prose naming the type of evidence (e.g. official programme page, prospectus PDF date). Do not mid-sentence truncate; length should follow what the evidence supports; use null if unclear,
+  evidence_note (string|null), source_url (string|null)"""
 
     if not fill_art_categories:
         return core + "\n\nUse null for any field not supported by evidence."
@@ -351,8 +352,8 @@ def _insert_evaluation(client, program_id: str, ev: dict) -> None:
         "application_difficulty_score": normalize_application_difficulty(
             ev.get("application_difficulty_score")
         ),
-        "competition_level": (_nullable_str(ev.get("competition_level")) or "")[:50] or None,
-        "data_source": (_nullable_str(ev.get("data_source")) or "")[:100] or None,
+        "competition_level": _nullable_str(ev.get("competition_level")),
+        "data_source": _nullable_str(ev.get("data_source")),
         "evidence_note": _nullable_str(ev.get("evidence_note")),
         "source_url": _nullable_str(ev.get("source_url")),
         "updated_by": "pipeline/stage5_program_satellite.py",
