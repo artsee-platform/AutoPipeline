@@ -10,6 +10,9 @@ Usage:
   python run_pipeline.py --stage 4 --batch 5          # seed programs (Tavily + Claude)
   python run_pipeline.py --stage 4 --batch 200 --reset-programs  # wipe programs, re-seed all schools
   python run_pipeline.py --stage 5 --batch 10         # fees / admissions / evaluations (no art links)
+  python run_pipeline.py --stage 6 --batch 10         # school_resource_metrics (Tavily + Claude)
+  python run_pipeline.py --stage 6 --batch 5 --force-resources  # redo even filled rows (same batch budget)
+  python run_pipeline.py --stage 7 --batch 1          # rebuild school_comparison_rollups (batch ignored — full scan)
   python run_pipeline.py --stage 5 --batch 10 --fill-art-categories  # also program_art_categories
   python run_pipeline.py --stage 1-3 --batch 10       # run all enrich stages
   python run_pipeline.py                              # default: runs stages 0-3
@@ -27,7 +30,7 @@ log = get_logger("pipeline")
 
 
 def parse_stages(stage_str: str) -> list[int]:
-    """Parse '1-4' → [1,2,3,4], '2' → [2]. Supports up to stage 5."""
+    """Parse '1-4' → [1,2,3,4], '2' → [2]. Supports stages 0–7."""
     if "-" in stage_str:
         start, end = stage_str.split("-", 1)
         return list(range(int(start), int(end) + 1))
@@ -44,7 +47,7 @@ def main():
         "--stage",
         type=str,
         default=None,
-        help="Stage(s) to run: 0–5, or range like 1-3 (4=programs, 5=program satellite tables)",
+        help="Stage(s): 0–7, or range like 1-3 — 6=school_resource_metrics, 7=school_comparison_rollups",
     )
     parser.add_argument(
         "--batch",
@@ -66,6 +69,11 @@ def main():
         "--fill-art-categories",
         action="store_true",
         help="With --stage 5: also fill program_art_categories (default: only fees/admissions/evaluations)",
+    )
+    parser.add_argument(
+        "--force-resources",
+        action="store_true",
+        help="With --stage 6: upsert metrics even when existing row already has data",
     )
     parser.add_argument(
         "--refresh-media",
@@ -123,11 +131,11 @@ def main():
         try:
             stages = parse_stages(args.stage)
         except ValueError:
-            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-5 or a range like 1-3.")
+            log.error(f"Invalid --stage value: {args.stage!r}. Use 0-7 or a range like 1-3.")
             sys.exit(1)
-        invalid = [s for s in stages if s not in {0, 1, 2, 3, 4, 5}]
+        invalid = [s for s in stages if s not in {0, 1, 2, 3, 4, 5, 6, 7}]
         if invalid:
-            log.error(f"Invalid stage(s): {invalid}. Use only 0–5 or a range like 1-5.")
+            log.error(f"Invalid stage(s): {invalid}. Use only 0–7.")
             sys.exit(1)
 
     log.info(f"Running stages {stages} with batch_size={batch_size}")
@@ -173,6 +181,14 @@ def main():
         elif stage == 5:
             from pipeline.stage5_program_satellite import run
             run(settings, batch_size, fill_art_categories=args.fill_art_categories)
+
+        elif stage == 6:
+            from pipeline.stage6_school_resource_metrics import run as run_resources
+            run_resources(settings, batch_size, force_refresh=args.force_resources)
+
+        elif stage == 7:
+            from pipeline.stage7_school_comparison_rollups import run as run_rollups
+            run_rollups(settings, batch_size)
 
         else:
             log.error(f"Unknown stage: {stage}")

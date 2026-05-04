@@ -345,3 +345,27 @@ def build_evidence_for_program_detail(
     if not blocks:
         return "No web evidence found."
     return trim_evidence_total("\n\n".join(blocks), EVIDENCE_TOTAL_SOFT_MAX)
+
+
+def build_evidence_for_school_resources(settings: Settings, school: dict) -> str:
+    """Evidence for student/faculty ratio, scholarships, and campus facilities (Stage 6)."""
+    name_en = school.get("name_en") or ""
+    name_zh = school.get("name_zh") or ""
+    website = (school.get("official_website") or "").strip()
+    country = school.get("raw_country") or school.get("country") or ""
+    domain = domain_from_url(website)
+
+    queries = [
+        f"{name_en} student faculty ratio staff-per-student FTE instructors {country}",
+        f"{name_en} scholarships financial aid international students grants {country}",
+        f"{name_en} campus studios workshops labs facilities makerspace {country}",
+    ]
+    if name_zh:
+        queries.append(f"{name_en} {name_zh} 师生比 奖学金 设施 奖学金 工作室")
+    if domain:
+        queries.append(f"site:{domain} student faculty ratio scholarship facilities")
+
+    blocks = _gather_blocks_from_queries(settings, queries, website, domain)
+    if not blocks:
+        return "No web evidence found."
+    return trim_evidence_total("\n\n".join(blocks), EVIDENCE_TOTAL_SOFT_MAX)
