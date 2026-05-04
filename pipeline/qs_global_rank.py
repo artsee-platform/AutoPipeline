@@ -5,8 +5,9 @@ Resolution order:
 1. Match against bundled QS overall CSV (same source as stage 2).
 2. If no numeric rank: Tavily web snippets + Claude extract (no HTML crawling).
 
-Column `schools.qs_overall_rank` is text: Arabic numerals as string, or \"未上榜\"
-when no overall rank is found after both steps.
+Database: `schools.qs_overall_rank` is an **integer** (or NULL). Use **NULL** when QS
+does not list the institution (no numeric rank after both steps). In UI or API
+responses, show NULL as `NOT_RANKED_LABEL` (\"未上榜\") via `display_qs_overall_rank`.
 """
 from __future__ import annotations
 
@@ -74,8 +75,8 @@ def load_overall_index() -> QSIndex | None:
     )
 
 
-def format_qs_overall_rank_value(rank: int | None) -> str:
-    """Value for DB column `schools.qs_overall_rank` (text)."""
+def display_qs_overall_rank(rank: int | None) -> str:
+    """Human-readable rank for logs, APIs, or UI (not for integer DB column)."""
     if rank is None:
         return NOT_RANKED_LABEL
     return str(rank)
@@ -226,9 +227,11 @@ def resolve_qs_overall_rank_with_llm(
     return qs_overall, llm_ranks, used_llm
 
 
-def fetch_qs_overall_rank_value(name_en: str, country: str, settings: Settings) -> str:
+def fetch_qs_overall_rank(
+    name_en: str, country: str, settings: Settings
+) -> int | None:
     """
-    End-to-end helper: return `schools.qs_overall_rank` for one school (digits or 未上榜).
+    End-to-end helper: return numeric `schools.qs_overall_rank` for one school, or None.
 
     Loads the overall index, runs matcher + optional LLM. For batch processing prefer
     stage 2 or call resolve_qs_overall_rank_with_llm with a shared Anthropic client.
@@ -238,4 +241,4 @@ def fetch_qs_overall_rank_value(name_en: str, country: str, settings: Settings) 
     n, _, _ = resolve_qs_overall_rank_with_llm(
         name_en, country, idx, settings, claude
     )
-    return format_qs_overall_rank_value(n)
+    return n

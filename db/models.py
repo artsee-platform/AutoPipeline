@@ -22,7 +22,7 @@ class School(TypedDict, total=False):
     description: Optional[str]
     feature_tags: Optional[list]
     status: Optional[str]
-    qs_overall_rank: Optional[str]  # digits as text, or 未上榜
+    qs_overall_rank: Optional[int]  # NULL = not in QS overall table; show 未上榜 in UI
     entry_score_requirements: Optional[str]
     annual_intake: Optional[int]
     application_deadline: Optional[str]

@@ -11,7 +11,7 @@ from pipeline.qs_matcher import QSIndex, MatchResult
 from pipeline.qs_global_rank import (
     load_overall_index,
     resolve_qs_overall_rank_with_llm,
-    format_qs_overall_rank_value,
+    display_qs_overall_rank,
 )
 
 log = get_logger("stage2")
@@ -145,7 +145,7 @@ def run(settings: Settings, batch_size: int) -> None:
         upsert_school(supabase, {
             **school,
             **subject_ranks,
-            "qs_overall_rank": format_qs_overall_rank_value(qs_overall),
+            "qs_overall_rank": qs_overall,
             "school_tier": tier,
             "status": "qs_done",
         })
@@ -157,7 +157,7 @@ def run(settings: Settings, batch_size: int) -> None:
             f"arch={subject_ranks.get('qs_architecture_built_environment_rank')}, "
             f"art_design={subject_ranks.get('qs_art_design_rank')}, "
             f"hist_art={subject_ranks.get('qs_history_of_art_rank')}, "
-            f"overall={qs_overall}, qs_overall_rank={format_qs_overall_rank_value(qs_overall)}, tier={tier}"
+            f"overall={qs_overall}, display={display_qs_overall_rank(qs_overall)}, tier={tier}"
         )
 
         # --- Collect for end-of-run reports ---
