@@ -1,93 +1,68 @@
 # 艺术设计院校数据自动化流水线（`yjxauto`）
 
-一个基于 Python 的多阶段数据流水线，用于：
+一个基于 Python + Supabase 的多阶段数据流水线，用于采集、清洗和结构化艺术/设计院校数据。
 
-- 从本地种子表导入艺术/设计院校基础信息；
-- 使用 Claude + Tavily + 网页抓取补全院校资料；
-- 自动匹配 QS 2026 排名并分层；
-- 通过视频元数据补充标签与描述。
+它会从本地种子表开始，逐步补全学校基础资料、QS 排名、媒体资源、专业列表、专业费用/录取/评价、学校资源指标，并生成学校对比页可直接使用的汇总表。
 
----
-
-## 1. 项目结构
+## 项目结构
 
 ```text
 yjxauto/
-├── run_pipeline.py             # 总入口，按 stage 执行
-├── config/settings.py          # .env 配置加载
-├── pipeline/
-│   ├── stage0_seed.py          # 从 Excel 导入 Supabase（初始状态 pending）
-│   ├── stage1_web_enrich.py    # Claude + 官网抓取补全
-│   ├── stage2_qs_rankings.py   # QS 排名匹配（含 LLM 兜底）
-│   └── stage3_video.py         # yt-dlp + Claude 补充标签
+├── run_pipeline.py                 # 总入口，按 stage 执行
+├── config/settings.py              # .env 配置加载
 ├── db/
-│   ├── supabase_client.py      # Supabase 读写
-│   └── models.py               # School 字段定义
+│   ├── supabase_client.py          # Supabase 读写
+│   ├── models.py                   # TypedDict 字段说明
+│   └── migrate_*.sql               # Supabase schema 迁移
+├── pipeline/
+│   ├── stage0_seed.py              # Excel -> schools
+│   ├── stage1_web_enrich.py        # 学校网页/LLM 富化
+│   ├── stage2_qs_rankings.py       # QS 排名匹配
+│   ├── stage3_video.py             # 视频元数据补标签
+│   ├── stage4_programs.py          # 抽取 programs
+│   ├── stage5_program_satellite.py # 抽取 fees/admissions/evaluations/categories
+│   ├── stage6_school_resource_metrics.py
+│   ├── stage7_school_comparison_rollups.py
+│   ├── evidence.py                 # Tavily + 官网页面证据抓取
+│   ├── qs_matcher.py               # QS 本地匹配器
+│   ├── degree_normalizer.py        # 学位标签规范化
+│   └── country_normalizer.py       # 国家/地区标签规范化
 ├── scrapers/
-│   ├── claude_researcher.py    # Tavily 检索 + Claude 结构化抽取
-│   └── website_scraper.py      # 官网 logo/campus 图片抓取
-└── data/
-    ├── schools.xlsx            # Stage 0 输入（需自行准备）
-    ├── qs_data_subject.xlsx    # QS 学科排名
-    ├── qs_data_metrics.csv     # QS 综合排名
-    └── qs_aliases.json         # 院校别名映射（手工维护）
+│   ├── claude_researcher.py        # Tavily + Claude 学校资料抽取
+│   ├── website_scraper.py          # 官网 logo/campus 图片抓取
+│   └── headless_image_scraper.py   # Playwright 图片候选采集
+├── scripts/                        # 字典同步与回填脚本
+├── data/
+│   ├── schools.xlsx                # Stage 0 输入
+│   ├── qs_data_subject.xlsx        # QS 学科排名
+│   ├── qs_data_metrics.csv         # QS 综合排名
+│   └── qs_aliases.json             # QS 别名映射
+└── tests/                          # 轻量本地测试
 ```
 
----
+## 环境准备
 
-## 2. 流水线阶段与状态流转
-
-### Stage 0：种子导入（Excel -> Supabase）
-- 读取 `data/schools.xlsx`，清洗后写入 `schools`；
-- 新记录写入 `status="pending"`；
-- 已存在记录仅更新种子字段（`name_zh/country/official_website`），不覆盖已富化内容。
-
-### Stage 1：网页富化（Claude + 抓官网）
-- 处理 `status="pending"` 的学校；
-- 先标记 `processing` 避免重复并发处理；
-- 完成后写回文本与媒体字段，状态变为 `enriched`；
-- 失败标记 `error`。
-
-### Stage 2：QS 排名匹配
-- 处理 `status="enriched"`；
-- 先用本地匹配器（`pipeline/qs_matcher.py`）对齐排名；
-- 对 `qs_overall_rank` 缺失的学校，使用 Tavily + Claude 兜底；
-- 写回各类 QS 字段和 `school_tier`，状态变为 `qs_done`；
-- 低置信度结果会在日志提示手工维护 `data/qs_aliases.json`。
-
-### Stage 3：视频元数据补充
-- 处理 `status="qs_done"`；
-- 通过 `yt-dlp` 拉取 YouTube/Bilibili 搜索结果；
-- 用 Claude 从视频标题/描述提取新增标签与描述修订；
-- 成功后状态变为 `done`，失败为 `error`。
-
-### 全部状态
-`pending -> processing -> enriched -> qs_done -> done`（任一阶段异常可进入 `error`）
-
----
-
-## 3. 环境准备
-
-### 3.1 Python 版本
 建议 Python `3.10+`。
-
-### 3.2 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+如果要使用 Playwright fallback 或官网图片渲染抓取，还需要安装浏览器：
 
-## 4. 配置 `.env`
+```bash
+playwright install chromium
+```
 
-先复制模板：
+## 配置
+
+复制模板并填写：
 
 ```bash
 cp .env.example .env
 ```
 
-然后填写以下变量：
+必填变量：
 
 ```env
 SUPABASE_URL=
@@ -97,85 +72,196 @@ ANTHROPIC_API_KEY=
 TAVILY_API_KEY=
 
 BATCH_SIZE=10
+EVIDENCE_PLAYWRIGHT=1
 ```
 
 说明：
-- `BATCH_SIZE` 是默认批量处理数量，可被命令行 `--batch` 覆盖；
-- 启动时若缺关键变量会直接报错退出。
 
----
+- `BATCH_SIZE` 是默认批量大小，可被命令行 `--batch` 覆盖。
+- `EVIDENCE_PLAYWRIGHT=1` 时，官网页面普通请求遇到 401/403/429/503 会尝试用 Playwright Chromium 重试，速度更慢但成功率更高。
+- Stage 1/2/4/5/6 会调用 Anthropic/Tavily；Stage 3 会调用 `yt-dlp` 搜索视频平台。
 
-## 5. 数据文件准备
+## 数据文件
 
-确保 `data/` 下至少具备以下文件：
+`data/` 下至少需要：
 
-- `schools.xlsx`：Stage 0 种子数据（需包含列：`name_en`, `name_zh`, `country_or_area`, `official_website`）；
-- `qs_data_subject.xlsx`：QS 学科排名源；
-- `qs_data_metrics.csv`：QS 综合排名源；
-- `qs_aliases.json`：可选，建议维护（用于提升匹配准确率）。
+- `schools.xlsx`：Stage 0 输入，包含 `name_en`, `name_zh`, `country_or_area`, `official_website`。
+- `qs_data_subject.xlsx`：QS 学科排名源。
+- `qs_data_metrics.csv`：QS 综合排名源。
+- `qs_aliases.json`：可选但建议维护，用于提高 QS 匹配准确率。
 
----
+## Supabase 迁移
 
-## 6. 运行方式
+`db/` 下的迁移文件描述了当前 schema 的演进。新环境建议按文件名中的阶段顺序执行，尤其是：
 
-入口脚本：`run_pipeline.py`
+- `migrate_p1_country_region.sql`
+- `migrate_p2_schools_raw_country_rename.sql`
+- `migrate_programs_id_to_uuid.sql`
+- `fix_programs_school_id.sql`
+- `migrate_programs_degree_type.sql`
+- `migrate_degree_labels_dictionary.sql`
+- `migrate_p3_currencies_fk.sql`
+- `migrate_p4_application_difficulty_1_5.sql`
+- `migrate_p5_competition_level_text.sql`
+- `migrate_p6_program_evaluations_prose_columns.sql`
+- `migrate_p7_schools_qs_rank.sql`
+- `migrate_p8_school_resource_metrics.sql`
+- `migrate_p9_school_comparison_rollups.sql`
+
+国家、地区、学位字典可用脚本同步：
 
 ```bash
-# 仅导入种子（stage 0）
-python run_pipeline.py --stage 0
-
-# 仅运行某一阶段
-python run_pipeline.py --stage 1 --batch 10
-python run_pipeline.py --stage 2 --batch 20
-python run_pipeline.py --stage 3 --batch 10
-
-# 连续运行多个阶段
-python run_pipeline.py --stage 1-3 --batch 10
-python run_pipeline.py --stage 0-3 --batch 10
-
-# 不传 --stage 时：默认执行 0-3 全阶段
-python run_pipeline.py
-
-# 将 error 状态重置为 pending（便于重试）
-python run_pipeline.py --retry-errors
+python -m scripts.sync_country_dictionaries
+python -m scripts.backfill_country_and_region
+python -m scripts.sync_degree_labels
+python -m scripts.backfill_degree_normalization
 ```
 
----
+## 流水线阶段
 
-## 7. Supabase 注意事项
+### Stage 0：种子导入
 
-### Supabase
-- 学校主表表名为 `schools`（见 `db/supabase_client.py` 中的 `TABLE`）；
-- 需包含 `db/models.py` 里涉及的字段（至少保证各阶段会写入字段存在）。
+读取 `data/schools.xlsx`，写入/更新 `schools`。新记录状态为 `pending`；已有记录只更新种子字段，不覆盖富化内容。
 
----
+```bash
+python run_pipeline.py --stage 0
+```
 
-## 8. 常见问题
+### Stage 1：学校网页富化
 
-### 1) 启动即报缺环境变量
-- 检查 `.env` 是否存在、变量名是否完整且拼写一致。
+处理 `status="pending"` 的学校，使用 Tavily + Claude 抽取学校基础资料，并用官网抓取 logo/campus 图片。成功后状态变为 `enriched`。
 
-### 2) Stage 2 匹配不准或丢失
-- 查看日志中的 `MANUAL REVIEW` 提示；
-- 在 `data/qs_aliases.json` 新增别名映射后重跑 Stage 2。
+```bash
+python run_pipeline.py --stage 1 --batch 10
+```
 
-### 3) Stage 3 视频抓取结果少
-- 目标学校公开视频本来可能较少；
-- Bilibili 在部分网络环境可能不可用，属正常降级。
+### Stage 2：QS 排名匹配
 
----
+处理 `status="enriched"` 的学校。先用本地 QS 文件和 `pipeline/qs_matcher.py` 匹配；综合排名缺失时用 Tavily + Claude 兜底。成功后状态变为 `qs_done`。
 
-## 8. 开发建议
+```bash
+python run_pipeline.py --stage 2 --batch 20
+```
 
-- 先小批量跑通：`--batch 3`；
-- 建议按 `0 -> 1 -> 2 -> 3` 顺序逐步验证；
-- 排查问题优先看每个 stage 的日志输出与 Supabase 状态字段。
+低置信度匹配会在日志中提示 `MANUAL REVIEW`，确认后可维护 `data/qs_aliases.json` 再重跑。
 
+### Stage 3：视频元数据补充
 
-## 总结：
-各 Stage 简要说明
-Stage 0：从 data/schools.xlsx 写入/更新 schools 种子字段，status='pending'。
-Stage 1：对 pending 学校做 网页富化（Claude + 抓官网等），补描述、链接、图片等，状态 → enriched。
-Stage 2：对 enriched 做 QS 排名匹配（本地匹配 + 必要时 Tavily/Claude），写各类 QS / tier，状态 → qs_done。
-Stage 3：对 qs_done 用 视频元数据（如 yt-dlp）补标签/描述等，状态 → done。
-Stage 4（顺带）：按 schools 拉证据，往 programs 里塞项目，不是富化学校主表的主线。
+处理 `status="qs_done"` 的学校，通过 `yt-dlp` 搜索 YouTube/Bilibili，再用 Claude 从标题和描述中提取补充标签。成功后状态变为 `done`。
+
+```bash
+python run_pipeline.py --stage 3 --batch 10
+```
+
+### Stage 4：专业列表抽取
+
+遍历 `schools`，对每所学校补足最多 3 条 `programs`。证据来自 Tavily 搜索和同域官网页面提取，再由 Claude 输出结构化专业数据。
+
+```bash
+python run_pipeline.py --stage 4 --batch 5
+python run_pipeline.py --stage 4 --batch 200 --reset-programs
+```
+
+`--reset-programs` 会清空 `programs` 后重跑，使用前请确认数据库状态。
+
+### Stage 5：专业卫星表补全
+
+遍历 `programs`，补齐：
+
+- `program_fees`
+- `program_admissions`
+- `program_evaluations`
+- 可选 `program_art_categories`
+
+```bash
+python run_pipeline.py --stage 5 --batch 10
+python run_pipeline.py --stage 5 --batch 10 --fill-art-categories
+```
+
+### Stage 6：学校资源指标
+
+补齐 `school_resource_metrics`，包括师生比文本、奖学金比例、校园设施摘要等。默认跳过已有实质数据的学校。
+
+```bash
+python run_pipeline.py --stage 6 --batch 10
+python run_pipeline.py --stage 6 --batch 5 --force-resources
+```
+
+### Stage 7：学校对比汇总
+
+全量扫描 active programs 和卫星表，重建 `school_comparison_rollups`。这个阶段会忽略 `--batch`，因为它需要一次性全量重算以保持对比数据一致。
+
+```bash
+python run_pipeline.py --stage 7 --batch 1
+```
+
+## 常用命令
+
+```bash
+# 默认执行 0-3
+python run_pipeline.py
+
+# 连续执行多个阶段
+python run_pipeline.py --stage 1-3 --batch 10
+python run_pipeline.py --stage 4-7 --batch 10
+
+# 重置 error 学校，便于重跑 Stage 1
+python run_pipeline.py --retry-errors
+
+# 只刷新缺失的 logo/campus 图片
+python run_pipeline.py --refresh-media --batch 20
+
+# 强制刷新所有学校媒体
+python run_pipeline.py --refresh-media --force-all --batch 50
+
+# 只刷新指定学校媒体
+python run_pipeline.py --refresh-media --schools "Royal College of Art,Parsons School of Design"
+```
+
+## 本地测试
+
+测试不依赖 Supabase、Anthropic 或 Tavily，主要覆盖纯逻辑模块：
+
+```bash
+python -m unittest discover -s tests
+```
+
+也可以做一次语法级检查：
+
+```bash
+python -m compileall -q .
+```
+
+## 常见问题
+
+### 启动即报缺环境变量
+
+检查 `.env` 是否存在，变量名是否和 `.env.example` 一致。
+
+### Stage 2 匹配不准或没匹配上
+
+看日志中的 `MANUAL REVIEW` 和 `NOT IN QS DATA`。确认学校在 QS 数据中的官方写法后，把映射加入 `data/qs_aliases.json`。
+
+### Stage 3 视频结果少
+
+公开视频本来可能很少；Bilibili 也可能因网络环境不可用，属于可降级路径。
+
+### Stage 4/5 速度慢
+
+这是预期现象。每个学校/专业会做多次搜索、官网页面抓取和 Claude 调用；遇到 403、PDF、超时或 Playwright fallback 时会更慢。建议先用 `--batch 3` 小批量验证。
+
+### Stage 4 报 programs.school_id 类型错误
+
+先确认已执行：
+
+```text
+db/migrate_programs_id_to_uuid.sql
+db/fix_programs_school_id.sql
+```
+
+## 开发建议
+
+- 新 schema 以 `schools.raw_country` 作为原始国家/地区文本字段，`country_code` 和 `region_tag` 是规范化后的字段。
+- Stage 4 及之后主要面向 `programs` 和卫星表，不再改变学校主状态流。
+- 外部证据抽取遵循“只用 evidence，不凭空补事实”的 prompt 约束，但仍建议对关键学校抽样人工 QA。
+- 新增规范化规则时，优先补纯逻辑测试，再同步对应字典表。
