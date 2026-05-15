@@ -337,7 +337,7 @@ def run(settings: Settings, batch_size: int) -> None:
 
     schools = _fetch_all_schools(
         client,
-        "id,name_en,name_zh,official_website,country",
+        "id,name_en,name_zh,official_website,raw_country",
     )
     log.info(f"Loaded {len(schools)} schools from {SCHOOLS_TABLE}")
 
