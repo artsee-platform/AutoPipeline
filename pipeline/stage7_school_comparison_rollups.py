@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import json
+import re
 from statistics import median
 from typing import Any
 
@@ -55,11 +57,67 @@ def _chunks(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
-def _normalize_career_list(val: Any) -> list:
+_TEXT_LIST_SPLIT_RE = re.compile(r"[\n\r,;|•·、，；]+")
+
+_STRONG_CAREER_SIGNAL_WORDS = (
+    "strong industry",
+    "industry link",
+    "industry partnership",
+    "internship",
+    "employment",
+    "career service",
+    "career support",
+    "placement",
+    "work placement",
+    "studio",
+    "studios",
+    "agency",
+    "agencies",
+    "museum",
+    "museums",
+    "gallery",
+    "galleries",
+)
+
+
+def _clean_text_items(items: list[Any]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if item is None:
+            continue
+        text = str(item).strip().strip("\"' ")
+        if not text or text.lower() in {"null", "none", "n/a", "na", "[]"}:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
+
+
+def _normalize_career_list(val: Any) -> list[str]:
     if val is None:
         return []
     if isinstance(val, list):
-        return [x for x in val if x is not None and str(x).strip()]
+        return _clean_text_items(val)
+    if isinstance(val, str):
+        text = val.strip()
+        if not text or text.lower() in {"null", "none", "n/a", "na", "[]"}:
+            return []
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                return _clean_text_items(parsed)
+        if text.startswith("{") and text.endswith("}"):
+            text = text[1:-1]
+        parts = _TEXT_LIST_SPLIT_RE.split(text)
+        clean = _clean_text_items(parts)
+        return clean if clean else _clean_text_items([text])
     return []
 
 
@@ -67,19 +125,27 @@ def _normalize_alumni(val: Any) -> list:
     return _normalize_career_list(val)
 
 
-def _career_signal(entries: int, alumni_n: int) -> int | None:
-    score_raw = entries + alumni_n * 3
-    if score_raw <= 0:
-        return None
-    if score_raw < 6:
+def _has_strong_career_signal(val: Any) -> bool:
+    if val is None:
+        return False
+    if isinstance(val, list):
+        text = " ".join(str(x) for x in val if x is not None)
+    else:
+        text = str(val)
+    lowered = text.casefold()
+    return any(word in lowered for word in _STRONG_CAREER_SIGNAL_WORDS)
+
+
+def _career_signal(entries: int, alumni_n: int, strong_signal: bool = False) -> int:
+    if entries <= 0 and alumni_n <= 0:
         return 1
-    if score_raw < 14:
-        return 2
-    if score_raw < 28:
-        return 3
-    if score_raw < 48:
+    if entries >= 10 or alumni_n >= 10 or strong_signal:
+        return 5
+    if entries >= 6 or alumni_n >= 5:
         return 4
-    return 5
+    if entries >= 3 or alumni_n >= 2:
+        return 3
+    return 2
 
 
 def _fetch_programs_page(client: Any, start: int, end: int) -> list[dict]:
@@ -145,6 +211,7 @@ def _rollup_payload_for_school(
     school_id: str,
     program_ids: list[str],
     career_entries: int,
+    strong_career_signal: bool,
     school_meta: dict,
     eval_rows: list[dict],
     fee_rows: list[dict],
@@ -186,7 +253,7 @@ def _rollup_payload_for_school(
     dom_median = medians_map.get(dom_ccy) if dom_ccy else None
 
     alumni = _normalize_alumni(school_meta.get("notable_alumni"))
-    career_score = _career_signal(career_entries, len(alumni))
+    career_score = _career_signal(career_entries, len(alumni), strong_career_signal)
 
     has_intl = bool((school_meta.get("international_students_page") or "").strip())
 
@@ -224,7 +291,9 @@ def run(settings: Settings, batch_size: int) -> None:  # noqa: ARG002 — retain
     _ = batch_size
     client = get_client(settings)
 
-    per_school: dict[str, dict[str, Any]] = defaultdict(lambda: {"pids": [], "career": 0})
+    per_school: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"pids": [], "career": set(), "strong_career_signal": False}
+    )
     pid_to_sid: dict[str, str] = {}
 
     idx = 0
@@ -243,7 +312,10 @@ def run(settings: Settings, batch_size: int) -> None:  # noqa: ARG002 — retain
             pid_s = str(pid)
             per_school[sid_s]["pids"].append(pid_s)
             pid_to_sid[pid_s] = sid_s
-            per_school[sid_s]["career"] += len(_normalize_career_list(prog.get("career_paths")))
+            career_raw = prog.get("career_paths")
+            per_school[sid_s]["career"].update(_normalize_career_list(career_raw))
+            if _has_strong_career_signal(career_raw):
+                per_school[sid_s]["strong_career_signal"] = True
             prog_total += 1
         idx += PAGE_PROGRAMS
 
@@ -290,7 +362,8 @@ def run(settings: Settings, batch_size: int) -> None:  # noqa: ARG002 — retain
         for sid in group:
             bucket = per_school.get(sid) or {}
             program_ids = list(dict.fromkeys(bucket.get("pids") or []))
-            career_ent = int(bucket.get("career") or 0)
+            career_ent = len(bucket.get("career") or set())
+            strong_career_signal = bool(bucket.get("strong_career_signal"))
             meta = schools_meta.get(sid) or {"id": sid}
             meta.setdefault("id", sid)
 
@@ -302,6 +375,7 @@ def run(settings: Settings, batch_size: int) -> None:  # noqa: ARG002 — retain
                 school_id=sid,
                 program_ids=program_ids,
                 career_entries=career_ent,
+                strong_career_signal=strong_career_signal,
                 school_meta=meta,
                 eval_rows=eval_rows,
                 fee_rows=fee_rows,
