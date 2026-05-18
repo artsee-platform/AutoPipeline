@@ -13,6 +13,7 @@ Supabase Storage and the DB is updated.
 from __future__ import annotations
 
 import argparse
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import html
 import json
@@ -40,11 +41,13 @@ MAX_CAMPUS = 5
 
 
 class ReviewState:
-    def __init__(self, batch: int, names: list[str] | None):
+    def __init__(self, batch: int, names: list[str] | None, offset: int = 0):
         self.settings = load_settings()
         self.client = get_client(self.settings)
         self.batch = batch
         self.names = names
+        self.offset = max(0, offset)
+        self.total_count = 0
         self.schools: list[dict] = []
         self.candidates: dict[str, dict] = {}
         self.refresh(load_candidates=False)
@@ -54,6 +57,18 @@ class ReviewState:
         self.candidates = {}
         if load_candidates:
             self.candidates = {row["id"]: self._build_candidates(row) for row in self.schools}
+
+    def next_batch(self) -> None:
+        if self.names:
+            return
+        self.offset = min(self.offset + self.batch, max(0, self.total_count - 1))
+        self.refresh(load_candidates=False)
+
+    def prev_batch(self) -> None:
+        if self.names:
+            return
+        self.offset = max(0, self.offset - self.batch)
+        self.refresh(load_candidates=False)
 
     def candidates_for(self, school_id: str, website_override: str = "") -> dict:
         cache_key = f"{school_id}|{website_override.strip()}"
@@ -66,18 +81,27 @@ class ReviewState:
 
     def _fetch_schools(self) -> list[dict]:
         cols = "id,name_en,name_zh,official_website,logo_url,campus_image_urls"
-        q = self.client.table(SCHOOLS_TABLE).select(cols)
         if self.names:
-            q = q.in_("name_en", self.names)
+            self.total_count = len(self.names)
+            q = self.client.table(SCHOOLS_TABLE).select(cols).in_("name_en", self.names)
         else:
             q = (
-                q
+                self.client.table(SCHOOLS_TABLE)
+                .select(cols, count="exact")
                 .in_("status", ["active", "done", "enriched"])
                 .not_.is_("official_website", "null")
                 .or_("logo_url.is.null,campus_image_urls.is.null,campus_image_urls.eq.{}")
-                .limit(self.batch)
+                .order("created_at")
+                .order("name_en")
+                .range(self.offset, self.offset + self.batch - 1)
             )
-        return q.execute().data or []
+        resp = q.execute()
+        if not self.names:
+            self.total_count = resp.count or 0
+            if self.total_count and self.offset >= self.total_count:
+                self.offset = max(0, self.total_count - self.batch)
+                return self._fetch_schools()
+        return resp.data or []
 
     def _build_candidates(self, row: dict, website_override: str = "") -> dict:
         website = website_override.strip() or row.get("official_website") or ""
@@ -132,6 +156,16 @@ class ReviewState:
                     kind="rendered-logo",
                     data=Path(logo["value"]).read_bytes(),
                     media_type="image/png",
+                )
+            elif logo.get("kind") == "logo_paste":
+                data, media_type = _decode_data_url(logo["value"])
+                stored = store_school_media_bytes(
+                    self.client,
+                    bucket=self.settings.school_media_bucket,
+                    school_id=school_id,
+                    kind="pasted-logo",
+                    data=data,
+                    media_type=media_type,
                 )
             else:
                 stored = store_school_media(
@@ -192,6 +226,12 @@ def make_handler(state: ReviewState):
             if parsed.path == "/refresh":
                 state.refresh(load_candidates=False)
                 return self._redirect("/")
+            if parsed.path == "/next":
+                state.next_batch()
+                return self._redirect("/")
+            if parsed.path == "/prev":
+                state.prev_batch()
+                return self._redirect("/")
             return self._html(render_page(state))
 
         def do_POST(self):
@@ -238,8 +278,32 @@ def make_handler(state: ReviewState):
     return Handler
 
 
+def _decode_data_url(value: str) -> tuple[bytes, str]:
+    if not value.startswith("data:image/") or ";base64," not in value:
+        raise ValueError("Pasted logo must be an image data URL")
+    header, encoded = value.split(",", 1)
+    media_type = header[5:].split(";", 1)[0]
+    if media_type not in {"image/png", "image/jpeg", "image/webp", "image/gif"}:
+        raise ValueError(f"Unsupported pasted image type: {media_type}")
+    data = base64.b64decode(encoded)
+    if len(data) > 8 * 1024 * 1024:
+        raise ValueError("Pasted image is larger than 8MB")
+    return data, media_type
+
+
 def render_page(state: ReviewState) -> str:
     cards = "\n".join(render_school(row) for row in state.schools)
+    start = state.offset + 1 if state.schools else 0
+    end = state.offset + len(state.schools)
+    progress = (
+        f"Showing {start}-{end} of {state.total_count} schools needing media review"
+        if not state.names else
+        f"Showing {len(state.schools)} selected school(s)"
+    )
+    nav = "" if state.names else """
+      <a class="button secondary" href="/prev">Previous batch</a>
+      <a class="button secondary" href="/next">Next batch</a>
+    """
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -256,9 +320,14 @@ def render_page(state: ReviewState) -> str:
     label.card:has(input:checked) {{ border-color: #1358d8; box-shadow: 0 0 0 3px rgba(19, 88, 216, .12); }}
     img {{ width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #f2f2f2; }}
     .campus img {{ object-fit: cover; }}
+    .paste-zone {{ border: 2px dashed #aaa; border-radius: 8px; padding: 14px; margin: 12px 0 18px; background: #fafafa; }}
+    .paste-zone.dragover {{ border-color: #1358d8; background: #eef4ff; }}
+    .paste-preview {{ display: none; max-width: 260px; margin-top: 10px; border: 1px solid #ddd; border-radius: 6px; background: white; }}
+    .toolbar {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }}
     input {{ margin-right: 6px; }}
     code {{ display: block; font-size: 10px; color: #666; word-break: break-all; margin-top: 6px; }}
     button, a.button {{ border: 0; border-radius: 6px; padding: 10px 14px; background: #111; color: white; text-decoration: none; cursor: pointer; font-size: 14px; }}
+    a.secondary {{ background: #555; }}
     .status {{ margin-left: 10px; font-weight: 600; }}
     .muted {{ color: #777; }}
   </style>
@@ -268,8 +337,12 @@ def render_page(state: ReviewState) -> str:
     <div>
       <h1>School Media Review</h1>
       <div class="muted">Select one logo and up to {MAX_CAMPUS} campus images per school.</div>
+      <div class="muted">{html.escape(progress)}</div>
     </div>
-    <a class="button" href="/refresh">Refresh batch</a>
+    <div class="toolbar">
+      {nav}
+      <a class="button" href="/refresh">Refresh batch</a>
+    </div>
   </header>
   {cards}
   <script>
@@ -281,14 +354,16 @@ def render_page(state: ReviewState) -> str:
       const resp = await fetch('/candidates?school_id=' + encodeURIComponent(schoolId) + '&website=' + encodeURIComponent(website));
       const data = await resp.json();
       target.innerHTML = data.ok ? data.html : '<p class="muted">Error: ' + data.error + '</p>';
+      setupCampusLimit(schoolId);
     }}
     async function approve(schoolId) {{
       const root = document.querySelector(`[data-school-id="${{schoolId}}"]`);
       const logoInput = root.querySelector('input[name="logo-' + schoolId + '"]:checked');
+      const pastedLogo = root.querySelector('.pasted-logo-data')?.value;
       const campusInputs = [...root.querySelectorAll('input[name="campus-' + schoolId + '"]:checked')].slice(0, {MAX_CAMPUS});
       const payload = {{
         school_id: schoolId,
-        logo: logoInput ? JSON.parse(logoInput.value) : null,
+        logo: pastedLogo ? {{ kind: 'logo_paste', label: 'pasted logo', value: pastedLogo }} : (logoInput ? JSON.parse(logoInput.value) : null),
         campus: campusInputs.map(i => JSON.parse(i.value))
       }};
       const status = root.querySelector('.status');
@@ -301,6 +376,56 @@ def render_page(state: ReviewState) -> str:
       const data = await resp.json();
       status.textContent = data.ok ? 'Saved' : 'Error: ' + data.error;
     }}
+
+    function setupCampusLimit(schoolId) {{
+      const root = document.querySelector(`[data-school-id="${{schoolId}}"]`);
+      const inputs = [...root.querySelectorAll('input[name="campus-' + schoolId + '"]')];
+      inputs.forEach(input => {{
+        input.addEventListener('change', () => {{
+          const checked = inputs.filter(i => i.checked);
+          if (checked.length > {MAX_CAMPUS}) {{
+            input.checked = false;
+            root.querySelector('.status').textContent = 'Campus image limit is {MAX_CAMPUS}';
+          }}
+        }});
+      }});
+    }}
+
+    function setupPasteZone(schoolId) {{
+      const root = document.querySelector(`[data-school-id="${{schoolId}}"]`);
+      const zone = root.querySelector('.paste-zone');
+      const fileInput = root.querySelector('.logo-file-input');
+      const dataInput = root.querySelector('.pasted-logo-data');
+      const preview = root.querySelector('.paste-preview');
+      async function useFile(file) {{
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {{
+          dataInput.value = reader.result;
+          preview.src = reader.result;
+          preview.style.display = 'block';
+          const checked = root.querySelector('input[name="logo-' + schoolId + '"]:checked');
+          if (checked) checked.checked = false;
+        }};
+        reader.readAsDataURL(file);
+      }}
+      zone.addEventListener('paste', (event) => {{
+        const item = [...event.clipboardData.items].find(i => i.type.startsWith('image/'));
+        if (item) useFile(item.getAsFile());
+      }});
+      zone.addEventListener('dragover', (event) => {{ event.preventDefault(); zone.classList.add('dragover'); }});
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+      zone.addEventListener('drop', (event) => {{
+        event.preventDefault();
+        zone.classList.remove('dragover');
+        useFile(event.dataTransfer.files[0]);
+      }});
+      fileInput.addEventListener('change', () => useFile(fileInput.files[0]));
+    }}
+
+    window.addEventListener('DOMContentLoaded', () => {{
+      document.querySelectorAll('[data-school-id]').forEach(section => setupPasteZone(section.dataset.schoolId));
+    }});
   </script>
 </body>
 </html>"""
@@ -314,6 +439,13 @@ def render_school(row: dict) -> str:
       <h2>{title}</h2>
       <div class="muted">Candidate source URL</div>
       <input class="website-input" value="{html.escape(row.get('official_website') or '', quote=True)}" style="width: min(760px, 100%); padding: 8px; margin: 8px 0 14px; font-size: 14px;" />
+      <div class="paste-zone" tabindex="0">
+        <strong>Paste or upload logo fallback</strong>
+        <div class="muted">Click this box, paste an image from your clipboard, drag an image here, or choose a local image file.</div>
+        <input class="logo-file-input" type="file" accept="image/*" />
+        <input class="pasted-logo-data" type="hidden" />
+        <img class="paste-preview" alt="Pasted logo preview" />
+      </div>
       <p><button onclick="loadCandidates('{html.escape(sid)}')">Load candidates</button></p>
       <div class="candidate-root"></div>
       <p><button onclick="approve('{html.escape(sid)}')">Submit selected</button><span class="status"></span></p>
