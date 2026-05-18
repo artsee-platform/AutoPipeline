@@ -5,8 +5,8 @@ Usage:
   python scripts/media_review_server.py --batch 10
   python scripts/media_review_server.py --schools "Royal College of Art,University of the Arts London"
 
-Open http://127.0.0.1:8787 in the browser, select one logo and up to five
-campus images for each school, then submit. Approved images are uploaded to
+Open http://127.0.0.1:8787 in the browser, select one logo and any campus
+images you want for each school, then submit. Approved images are uploaded to
 Supabase Storage and the DB is updated.
 """
 
@@ -37,7 +37,6 @@ from scrapers.rendered_logo import write_rendered_logo_candidates
 
 
 ASSET_DIR = ROOT / "data" / "media_review" / "assets"
-MAX_CAMPUS = 5
 
 
 class ReviewState:
@@ -183,7 +182,7 @@ class ReviewState:
         campus_urls = payload.get("campus") or []
         if campus_urls:
             public_urls = []
-            for idx, item in enumerate(campus_urls[:MAX_CAMPUS], start=1):
+            for idx, item in enumerate(campus_urls, start=1):
                 stored = store_school_media(
                     self.client,
                     bucket=self.settings.school_media_bucket,
@@ -336,7 +335,7 @@ def render_page(state: ReviewState) -> str:
   <header>
     <div>
       <h1>School Media Review</h1>
-      <div class="muted">Select one logo and up to {MAX_CAMPUS} campus images per school.</div>
+      <div class="muted">Select one logo and any campus images you want per school.</div>
       <div class="muted">{html.escape(progress)}</div>
     </div>
     <div class="toolbar">
@@ -354,13 +353,12 @@ def render_page(state: ReviewState) -> str:
       const resp = await fetch('/candidates?school_id=' + encodeURIComponent(schoolId) + '&website=' + encodeURIComponent(website));
       const data = await resp.json();
       target.innerHTML = data.ok ? data.html : '<p class="muted">Error: ' + data.error + '</p>';
-      setupCampusLimit(schoolId);
     }}
     async function approve(schoolId) {{
       const root = document.querySelector(`[data-school-id="${{schoolId}}"]`);
       const logoInput = root.querySelector('input[name="logo-' + schoolId + '"]:checked');
       const pastedLogo = root.querySelector('.pasted-logo-data')?.value;
-      const campusInputs = [...root.querySelectorAll('input[name="campus-' + schoolId + '"]:checked')].slice(0, {MAX_CAMPUS});
+      const campusInputs = [...root.querySelectorAll('input[name="campus-' + schoolId + '"]:checked')];
       const payload = {{
         school_id: schoolId,
         logo: pastedLogo ? {{ kind: 'logo_paste', label: 'pasted logo', value: pastedLogo }} : (logoInput ? JSON.parse(logoInput.value) : null),
@@ -375,20 +373,6 @@ def render_page(state: ReviewState) -> str:
       }});
       const data = await resp.json();
       status.textContent = data.ok ? 'Saved' : 'Error: ' + data.error;
-    }}
-
-    function setupCampusLimit(schoolId) {{
-      const root = document.querySelector(`[data-school-id="${{schoolId}}"]`);
-      const inputs = [...root.querySelectorAll('input[name="campus-' + schoolId + '"]')];
-      inputs.forEach(input => {{
-        input.addEventListener('change', () => {{
-          const checked = inputs.filter(i => i.checked);
-          if (checked.length > {MAX_CAMPUS}) {{
-            input.checked = false;
-            root.querySelector('.status').textContent = 'Campus image limit is {MAX_CAMPUS}';
-          }}
-        }});
-      }});
     }}
 
     function setupPasteZone(schoolId) {{
