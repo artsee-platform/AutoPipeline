@@ -1,5 +1,6 @@
 .env
 data/cache/
+data/media_review/
 __pycache__/
 *.pyc
 *.pyo

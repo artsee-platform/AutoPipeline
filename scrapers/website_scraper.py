@@ -6,6 +6,12 @@ import requests_cache
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+from pipeline.media_validator import (
+    MEDIA_MISSING,
+    MEDIA_OK,
+    validate_campus_url,
+    validate_logo_url,
+)
 from utils.logger import get_logger
 from utils.retry import retry
 
@@ -43,21 +49,26 @@ def scrape_school_website(url: str) -> dict:
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # --- Logo: try og:image first, then apple-touch-icon, then first header img ---
-    og_image = soup.find("meta", property="og:image")
-    if og_image and og_image.get("content"):
-        result["logo_url"] = _abs(url, og_image["content"])
+    # --- Logo: prefer explicit logo/brand assets. Avoid og:image here because
+    # it is usually a social-share banner/photo rather than an institutional logo.
+    schema_logo = _schema_logo(soup)
+    if schema_logo:
+        result["logo_url"] = _abs(url, schema_logo)
     else:
-        touch_icon = soup.find("link", rel=lambda r: r and "apple-touch-icon" in r)
-        if touch_icon and touch_icon.get("href"):
-            result["logo_url"] = _abs(url, touch_icon["href"])
-        else:
-            # Try a logo img in header/nav
-            for tag in soup.select("header img, nav img, .logo img, #logo img"):
-                src = tag.get("src") or tag.get("data-src")
-                if src:
-                    result["logo_url"] = _abs(url, src)
-                    break
+        for tag in soup.select("header img, nav img, .logo img, #logo img, [class*=logo] img, [class*=brand] img"):
+            src = tag.get("src") or tag.get("data-src")
+            label = " ".join([
+                tag.get("alt") or "",
+                tag.get("class") if isinstance(tag.get("class"), str) else " ".join(tag.get("class") or []),
+                src or "",
+            ]).lower()
+            if src and any(k in label for k in ("logo", "brand", "crest", "seal", "wordmark")):
+                result["logo_url"] = _abs(url, src)
+                break
+        if not result["logo_url"]:
+            touch_icon = soup.find("link", rel=lambda r: r and "apple-touch-icon" in r)
+            if touch_icon and touch_icon.get("href"):
+                result["logo_url"] = _abs(url, touch_icon["href"])
 
     # --- Campus images: collect up to 5 large images from the page ---
     campus_imgs = []
@@ -100,6 +111,7 @@ def scrape_school_website_smart(
     url: str,
     school_name: str,
     claude: Optional[anthropic.Anthropic] = None,
+    image_search_api_key: str = "",
 ) -> dict:
     """Headless + Claude-vision scraper with graceful static-HTML fallback.
 
@@ -113,14 +125,19 @@ def scrape_school_website_smart(
     Returns the same shape as scrape_school_website: {"logo_url", "campus_image_urls"}.
     campus_image_urls will contain at most one element (the single best cover photo).
     """
-    empty = {"logo_url": None, "campus_image_urls": []}
+    empty = {
+        "logo_url": None,
+        "campus_image_urls": [],
+        "logo_status": MEDIA_MISSING,
+        "campus_image_status": MEDIA_MISSING,
+    }
     if not url:
         return empty
 
     # Without a Claude client we can't do the multimodal pick, so just fall back.
     if claude is None:
         log.info(f"smart scrape: no Claude client provided, using static fallback for {url}")
-        return scrape_school_website(url)
+        return _with_media_status(scrape_school_website(url))
 
     try:
         # Import lazily so missing Playwright / circular-import risks don't break
@@ -150,6 +167,17 @@ def scrape_school_website_smart(
         else:
             campus_url, campus_status = None, "error"
 
+        if not campus_url and image_search_api_key:
+            from scrapers.image_search import search_campus_image_candidates
+
+            search_cands = search_campus_image_candidates(
+                image_search_api_key,
+                school_name,
+                official_website=url,
+            )
+            if search_cands:
+                campus_url, campus_status = pick_best_campus(claude, school_name, search_cands)
+
         # Fall back to static HTML ONLY when the classifier couldn't actually run
         # (no candidates, download/API failure). If Claude explicitly said "none match",
         # we trust that verdict and leave the field empty rather than serving garbage.
@@ -162,10 +190,62 @@ def scrape_school_website_smart(
                 fb_campus = fb.get("campus_image_urls") or []
                 campus_url = fb_campus[0] if fb_campus else None
 
-        return {
+        result = {
             "logo_url": logo_url,
             "campus_image_urls": [campus_url] if campus_url else [],
         }
+        return _with_media_status(result)
     except Exception as exc:
         log.exception(f"smart scrape failed for {url}: {exc}; using static fallback")
-        return scrape_school_website(url)
+        return _with_media_status(scrape_school_website(url))
+
+
+def _with_media_status(media: dict) -> dict:
+    logo_url = media.get("logo_url")
+    campus_urls = media.get("campus_image_urls") or []
+    campus_url = campus_urls[0] if campus_urls else None
+
+    logo_result = validate_logo_url(logo_url)
+    campus_result = validate_campus_url(campus_url)
+
+    out = dict(media)
+    if logo_result.status != MEDIA_OK:
+        out["logo_url"] = None
+    if campus_result.status != MEDIA_OK:
+        out["campus_image_urls"] = []
+    out["logo_status"] = logo_result.status
+    out["campus_image_status"] = campus_result.status
+    return out
+
+
+def _schema_logo(soup: BeautifulSoup) -> str | None:
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            import json
+
+            data = json.loads(script.string or "")
+        except Exception:
+            continue
+        logo = _find_logo_in_jsonld(data)
+        if logo:
+            return logo
+    return None
+
+
+def _find_logo_in_jsonld(data) -> str | None:
+    if isinstance(data, list):
+        for item in data:
+            logo = _find_logo_in_jsonld(item)
+            if logo:
+                return logo
+    if not isinstance(data, dict):
+        return None
+    logo = data.get("logo")
+    if isinstance(logo, str):
+        return logo
+    if isinstance(logo, dict) and isinstance(logo.get("url"), str):
+        return logo["url"]
+    graph = data.get("@graph")
+    if graph:
+        return _find_logo_in_jsonld(graph)
+    return None

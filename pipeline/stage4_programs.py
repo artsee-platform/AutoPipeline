@@ -22,6 +22,7 @@ from config.settings import Settings
 from db.supabase_client import TABLE as SCHOOLS_TABLE, get_client
 from pipeline import evidence
 from pipeline.degree_normalizer import normalize_degree
+from pipeline.media_storage import store_program_cover_media
 from utils.logger import get_logger
 from utils.retry import retry
 
@@ -369,6 +370,16 @@ def run(settings: Settings, batch_size: int) -> None:
                 continue
             if _already_has_program(client, sid, row["program_name"]):
                 continue
+            if row.get("cover_image_url"):
+                stored_cover = store_program_cover_media(
+                    client,
+                    bucket=settings.school_media_bucket,
+                    school_id=sid,
+                    program_key=row.get("source_hash") or row["program_name"],
+                    source_url=row["cover_image_url"],
+                )
+                if stored_cover:
+                    row["cover_image_url"] = stored_cover.public_url
             try:
                 client.table(PROGRAMS_TABLE).insert(row).execute()
                 inserted_here += 1

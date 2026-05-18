@@ -57,12 +57,18 @@ _COLLECT_JS = r"""
         else if (img.closest('.hero,.banner,.slider,.carousel,.swiper,#hero,.cover')) context = 'hero';
         else if (img.closest('main')) context = 'main';
 
+        const parent = img.closest('a, header, nav, [id*="logo" i], [class*="logo" i], [class*="brand" i]');
         out.imgs.push({
             url: src,
             w, h,
+            x: rect.x,
+            y: rect.y,
             alt: img.alt || '',
             context,
-            cls: img.className || ''
+            cls: img.className || '',
+            parentText: parent ? (parent.innerText || parent.getAttribute('aria-label') || parent.getAttribute('title') || '') : '',
+            parentCls: parent ? String(parent.className || '') : '',
+            parentId: parent ? String(parent.id || '') : ''
         });
     }
 
@@ -77,8 +83,21 @@ _COLLECT_JS = r"""
         const m = bg.match(/url\(['"]?([^'")]+)['"]?\)/);
         if (!m) continue;
         const rect = el.getBoundingClientRect();
-        if (rect.width < 200 || rect.height < 150) continue;
-        out.bgs.push({ url: m[1], w: rect.width, h: rect.height });
+        const label = [
+            el.id || '',
+            String(el.className || ''),
+            el.getAttribute('aria-label') || '',
+            el.getAttribute('title') || '',
+            el.innerText || ''
+        ].join(' ').toLowerCase();
+        const isLogoish = label.includes('logo') || label.includes('brand') || label.includes('university') || label.includes('college');
+        const isTop = rect.top >= -20 && rect.top <= 300;
+        if (!isLogoish && !isTop && (rect.width < 200 || rect.height < 150)) continue;
+        if (rect.width < 24 || rect.height < 18) continue;
+        out.bgs.push({
+            url: m[1], w: rect.width, h: rect.height, x: rect.x, y: rect.y,
+            cls: String(el.className || ''), id: String(el.id || ''), text: el.innerText || ''
+        });
     }
 
     return out;
@@ -89,9 +108,11 @@ _COLLECT_JS = r"""
 @dataclass
 class ImageCandidate:
     url: str
-    source: str                        # og_image | favicon | img_tag | bg_image
+    source: str                        # og_image | favicon | img_tag | bg_image | image_search
     width: int = 0
     height: int = 0
+    left: int = 0
+    top: int = 0
     alt: str = ""
     context: str = ""                  # header | nav | footer | hero | main | ""
     cls: str = ""
@@ -136,6 +157,10 @@ def collect_candidates(
                     # networkidle can be slow on ad/tracker-heavy sites; domcontentloaded is enough
                     log.info(f"networkidle timed out for {url}, retry with domcontentloaded")
                     page.goto(url, wait_until="domcontentloaded", timeout=goto_timeout_ms)
+
+                if not _wait_past_verification(page):
+                    log.warning(f"headless collect skipped verification/interstitial page for {url}")
+                    return []
 
                 # Trigger lazy-loading
                 if scroll:
@@ -190,9 +215,16 @@ def collect_candidates(
                 source="img_tag",
                 width=int(item.get("w") or 0),
                 height=int(item.get("h") or 0),
+                left=int(item.get("x") or 0),
+                top=int(item.get("y") or 0),
                 alt=item.get("alt") or "",
                 context=item.get("context") or "",
                 cls=item.get("cls") or "",
+                extra={
+                    "parent_text": item.get("parentText") or "",
+                    "parent_cls": item.get("parentCls") or "",
+                    "parent_id": item.get("parentId") or "",
+                },
             ))
 
     for item in raw.get("bgs", []) or []:
@@ -202,10 +234,42 @@ def collect_candidates(
                 url=abs_u, source="bg_image",
                 width=int(item.get("w") or 0),
                 height=int(item.get("h") or 0),
+                left=int(item.get("x") or 0),
+                top=int(item.get("y") or 0),
+                cls=item.get("cls") or "",
+                alt=item.get("text") or "",
+                extra={"id": item.get("id") or ""},
             ))
 
     log.info(f"{url}: collected {len(candidates)} raw candidates")
     return candidates
+
+
+def _wait_past_verification(page, timeout_ms: int = 9000) -> bool:
+    blocked_markers = (
+        "verify you are human",
+        "checking your browser",
+        "just a moment",
+        "enable javascript and cookies",
+        "attention required",
+        "cloudflare",
+        "ddos-guard",
+        "please wait while we check",
+    )
+    elapsed = 0
+    while elapsed <= timeout_ms:
+        try:
+            text = page.evaluate(
+                "() => ((document.title || '') + ' ' + (document.body ? document.body.innerText : '')).toLowerCase().slice(0, 4000)"
+            )
+        except Exception:
+            text = ""
+        if text and not any(marker in text for marker in blocked_markers):
+            page.wait_for_timeout(900)
+            return True
+        page.wait_for_timeout(1000)
+        elapsed += 1000
+    return False
 
 
 # -----------------------------------------------------------------------------
@@ -249,12 +313,16 @@ def select_logo_candidates(cands: list[ImageCandidate], limit: int = 8) -> list[
         score = 0
         alt = (c.alt or "").lower()
         cls = (c.cls or "").lower()
+        parent_text = ((c.extra or {}).get("parent_text") or "").lower()
+        parent_cls = ((c.extra or {}).get("parent_cls") or "").lower()
+        parent_id = ((c.extra or {}).get("parent_id") or (c.extra or {}).get("id") or "").lower()
+        all_labels = " ".join([alt, cls, parent_text, parent_cls, parent_id])
 
         if any(k in u for k in _LOGO_URL_POSITIVE):
             score += 5
-        if any(k in alt for k in ("logo", "crest", "emblem", "seal", "校徽")):
+        if any(k in all_labels for k in ("logo", "crest", "emblem", "seal", "校徽", "university", "college", "academy")):
             score += 4
-        if any(k in cls for k in ("logo", "brand", "header-logo", "site-logo")):
+        if any(k in all_labels for k in ("logo", "brand", "navbar-brand", "header-logo", "site-logo", "uni-logo")):
             score += 3
 
         if c.source == "favicon":
@@ -264,10 +332,25 @@ def select_logo_candidates(cands: list[ImageCandidate], limit: int = 8) -> list[
             if "apple-touch-icon" in rel:
                 score += 2
         if c.source == "og_image":
-            score += 1
+            # Social-share images are often posters, photos, or banners. Keep
+            # them only when other evidence says logo/crest/brand.
+            score -= 2
 
         if c.context in ("header", "nav"):
             score += 3
+
+        # Many university headers use a plain banner image for the institution
+        # lockup (crest + name) with unhelpful filenames like banner_0.jpg and
+        # alt text like "1". Prefer visible top-page images with logo-like
+        # proportions even when their filename has no semantic hint.
+        if c.source in ("img_tag", "bg_image") and 0 <= c.top <= 300:
+            score += 3
+            if c.left <= 1000:
+                score += 2
+            if 120 <= c.width <= 950 and 32 <= c.height <= 260:
+                score += 2
+            if c.height and 1.5 <= (c.width / c.height) <= 8.0:
+                score += 2
 
         if u.endswith(".svg"):
             score += 2

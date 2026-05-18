@@ -12,6 +12,7 @@ class Settings:
     anthropic_api_key: str
     tavily_api_key: str
     batch_size: int
+    school_media_bucket: str
 
 
 def load_settings() -> Settings:
@@ -27,4 +28,5 @@ def load_settings() -> Settings:
         anthropic_api_key=require("ANTHROPIC_API_KEY"),
         tavily_api_key=require("TAVILY_API_KEY"),
         batch_size=int(os.getenv("BATCH_SIZE", "10")),
+        school_media_bucket=os.getenv("SCHOOL_MEDIA_BUCKET", "school-media"),
     )
